@@ -1,0 +1,1046 @@
+openapi: 3.1.0
+info:
+  title: Life Tracker API
+  version: "1.0.0"
+  description: >
+    Contract between backend and frontend for Life Tracker v1.
+    All routes are prefixed /api/v1. Auth is a Bearer JWT on every route
+    except /auth/register and /auth/login.
+    Maps to user stories in docs/user-stories.md (US-xx, EC-xx).
+
+servers:
+  - url: /api/v1
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: auth
+  - name: goals
+  - name: milestones
+  - name: check-ins
+  - name: scoring
+  - name: dashboard
+  - name: reviews
+  - name: settings
+  - name: health
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                required: [status]
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Sign up (US-01)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account created, tokens issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error (bad email/password/name)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Log in (US-02)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Wrong email or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Current user profile (US-03, US-19)
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [auth]
+      summary: Update profile name (US-19)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+              required: [name]
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /goals:
+    get:
+      tags: [goals]
+      summary: List goals, optionally filtered by category (US-05)
+      parameters:
+        - name: category
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/Category"
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/GoalStatus"
+      responses:
+        "200":
+          description: Goals for the current user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Goal"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [goals]
+      summary: Create a goal (US-04, US-08, US-09, US-10)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalCreateRequest"
+      responses:
+        "201":
+          description: Goal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Goal"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /goals/{goalId}:
+    parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [goals]
+      summary: Goal detail (US-16)
+      responses:
+        "200":
+          description: Goal detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Goal"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [goals]
+      summary: Edit a goal (US-06, EC-05)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoalUpdateRequest"
+      responses:
+        "200":
+          description: Updated goal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Goal"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [goals]
+      summary: Delete a goal, including its check-ins and snapshots (US-07, EC-04)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /goals/{goalId}/milestones:
+    parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [milestones]
+      summary: Add a subtask to a milestone goal (US-10)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MilestoneCreateRequest"
+      responses:
+        "201":
+          description: Milestone created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Milestone"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /milestones/{milestoneId}:
+    parameters:
+      - name: milestoneId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [milestones]
+      summary: Edit or complete a subtask (US-10)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MilestoneUpdateRequest"
+      responses:
+        "200":
+          description: Updated milestone
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Milestone"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [milestones]
+      summary: Remove a subtask
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /goals/{goalId}/check-ins:
+    parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [check-ins]
+      summary: Check-in history for a goal, newest first (US-16)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Check-ins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CheckIn"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [check-ins]
+      summary: Log a check-in (US-11, EC-02, EC-03)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckInCreateRequest"
+      responses:
+        "201":
+          description: Check-in saved; goal score recalculated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckIn"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /check-ins/{checkInId}:
+    parameters:
+      - name: checkInId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [check-ins]
+      summary: Delete a check-in; score recalculates without it (US-12)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /goals/{goalId}/score:
+    parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [scoring]
+      summary: Current score breakdown for a goal (US-13, EC-07, EC-08)
+      responses:
+        "200":
+          description: Score breakdown
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoalScore"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /goals/{goalId}/score-history:
+    parameters:
+      - name: goalId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [scoring]
+      summary: Daily score snapshots for trend charts (US-16)
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            enum: [7, 30]
+            default: 30
+      responses:
+        "200":
+          description: Score history, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScoreSnapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /dashboard:
+    get:
+      tags: [dashboard]
+      summary: Overall score, category scores, streaks, trend, attention list (US-15, EC-09, EC-10)
+      parameters:
+        - name: trend_days
+          in: query
+          required: false
+          schema:
+            type: integer
+            enum: [7, 30]
+            default: 7
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /reviews/weekly:
+    get:
+      tags: [reviews]
+      summary: Weekly review for a given week (US-17)
+      parameters:
+        - name: week_start
+          in: query
+          required: true
+          description: Monday of the requested week, YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Weekly review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WeeklyReview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /settings/category-weights:
+    get:
+      tags: [settings]
+      summary: Current category weights (US-18)
+      responses:
+        "200":
+          description: Category weights, default equal if unset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryWeights"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [settings]
+      summary: Set category weights (US-18)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryWeights"
+      responses:
+        "200":
+          description: Updated category weights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryWeights"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Resource does not exist or does not belong to the current user
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Request failed validation
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: VALIDATION_ERROR
+            message:
+              type: string
+              example: "email is required"
+          required: [code, message]
+      required: [error]
+
+    Category:
+      type: string
+      enum: [fitness, study, career, custom]
+
+    GoalType:
+      type: string
+      enum: [numeric, habit, milestone]
+
+    GoalStatus:
+      type: string
+      enum: [active, completed, archived]
+
+    Grade:
+      type: string
+      enum: ["S", "A", "B", "C", "D", "Calibrating"]
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+      required: [id, name, email, created_at]
+
+    RegisterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+      required: [name, email, password]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        user:
+          $ref: "#/components/schemas/User"
+      required: [access_token, token_type, user]
+
+    Milestone:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        goal_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        is_done:
+          type: boolean
+        done_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, goal_id, title, is_done]
+
+    MilestoneCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        due_date:
+          type: string
+          format: date
+          nullable: true
+      required: [title]
+
+    MilestoneUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        is_done:
+          type: boolean
+      minProperties: 1
+
+    Goal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        category:
+          $ref: "#/components/schemas/Category"
+        type:
+          $ref: "#/components/schemas/GoalType"
+        target_value:
+          type: number
+          nullable: true
+          description: Numeric goals only
+        current_value:
+          type: number
+          nullable: true
+          description: Numeric goals only; 0 until first check-in
+        unit:
+          type: string
+          nullable: true
+          description: Numeric goals only
+        frequency_per_week:
+          type: integer
+          nullable: true
+          description: Habit goals only
+        start_date:
+          type: string
+          format: date
+        deadline:
+          type: string
+          format: date
+          nullable: true
+          description: null means consistency-only pace (EC-01)
+        weight:
+          type: number
+          default: 1
+        status:
+          $ref: "#/components/schemas/GoalStatus"
+        milestones:
+          type: array
+          items:
+            $ref: "#/components/schemas/Milestone"
+          description: Milestone goals only
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - user_id
+        - title
+        - category
+        - type
+        - start_date
+        - weight
+        - status
+        - created_at
+
+    GoalCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          nullable: true
+        category:
+          $ref: "#/components/schemas/Category"
+        type:
+          $ref: "#/components/schemas/GoalType"
+        target_value:
+          type: number
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        frequency_per_week:
+          type: integer
+          nullable: true
+        start_date:
+          type: string
+          format: date
+        deadline:
+          type: string
+          format: date
+          nullable: true
+        weight:
+          type: number
+          default: 1
+      required: [title, category, type, start_date]
+
+    GoalUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          nullable: true
+        category:
+          $ref: "#/components/schemas/Category"
+        target_value:
+          type: number
+          nullable: true
+        unit:
+          type: string
+          nullable: true
+        frequency_per_week:
+          type: integer
+          nullable: true
+        deadline:
+          type: string
+          format: date
+          nullable: true
+        weight:
+          type: number
+        status:
+          $ref: "#/components/schemas/GoalStatus"
+      minProperties: 1
+
+    CheckIn:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        goal_id:
+          type: string
+          format: uuid
+        value:
+          type: number
+          nullable: true
+          description: Optional for habit goals (US-11)
+        note:
+          type: string
+          nullable: true
+        effort_rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        logged_for:
+          type: string
+          format: date
+        created_at:
+          type: string
+          format: date-time
+      required: [id, goal_id, effort_rating, logged_for, created_at]
+
+    CheckInCreateRequest:
+      type: object
+      properties:
+        value:
+          type: number
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        effort_rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        logged_for:
+          type: string
+          format: date
+      required: [effort_rating, logged_for]
+
+    GoalScore:
+      type: object
+      properties:
+        goal_id:
+          type: string
+          format: uuid
+        pace:
+          type: number
+          minimum: 0
+          maximum: 1
+        consistency:
+          type: number
+          minimum: 0
+          maximum: 1
+        momentum:
+          type: number
+          minimum: 0
+          maximum: 1
+        effort:
+          type: number
+          minimum: 0
+          maximum: 1
+        total:
+          type: integer
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: null while grade is "Calibrating"
+        grade:
+          $ref: "#/components/schemas/Grade"
+        is_frozen:
+          type: boolean
+          description: true if goal is completed and score is frozen (EC-08)
+      required: [goal_id, pace, consistency, momentum, effort, grade, is_frozen]
+
+    ScoreSnapshot:
+      type: object
+      properties:
+        snapshot_date:
+          type: string
+          format: date
+        pace:
+          type: number
+        consistency:
+          type: number
+        momentum:
+          type: number
+        effort:
+          type: number
+        total:
+          type: integer
+          nullable: true
+      required: [snapshot_date, pace, consistency, momentum, effort, total]
+
+    CategoryScore:
+      type: object
+      properties:
+        category:
+          $ref: "#/components/schemas/Category"
+        score:
+          type: integer
+          nullable: true
+          description: null if category has no active goals (EC-10)
+        has_active_goals:
+          type: boolean
+      required: [category, has_active_goals]
+
+    AttentionGoal:
+      type: object
+      properties:
+        goal_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        score:
+          type: integer
+          nullable: true
+        reason:
+          type: string
+          example: "Score dropped 12 points this week"
+      required: [goal_id, title, reason]
+
+    Dashboard:
+      type: object
+      properties:
+        overall_score:
+          type: integer
+          nullable: true
+          description: null if user has zero active goals (EC-09)
+        overall_grade:
+          $ref: "#/components/schemas/Grade"
+        category_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryScore"
+        current_streak_days:
+          type: integer
+        best_streak_days:
+          type: integer
+        trend:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              score:
+                type: integer
+                nullable: true
+            required: [date, score]
+        attention:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttentionGoal"
+      required:
+        - overall_score
+        - overall_grade
+        - category_scores
+        - current_streak_days
+        - best_streak_days
+        - trend
+        - attention
+
+    WeeklyReview:
+      type: object
+      properties:
+        week_start:
+          type: string
+          format: date
+        has_enough_history:
+          type: boolean
+          description: false shows a "not enough history" message instead of a comparison (US-17)
+        overall_score:
+          type: integer
+          nullable: true
+        previous_week_score:
+          type: integer
+          nullable: true
+        score_change:
+          type: integer
+          nullable: true
+        best_goal:
+          type: object
+          nullable: true
+          properties:
+            goal_id:
+              type: string
+              format: uuid
+            title:
+              type: string
+            score:
+              type: integer
+          required: [goal_id, title, score]
+        slipping_goal:
+          type: object
+          nullable: true
+          properties:
+            goal_id:
+              type: string
+              format: uuid
+            title:
+              type: string
+            score:
+              type: integer
+          required: [goal_id, title, score]
+      required: [week_start, has_enough_history]
+
+    CategoryWeights:
+      type: object
+      properties:
+        weights:
+          type: array
+          items:
+            type: object
+            properties:
+              category:
+                $ref: "#/components/schemas/Category"
+              weight:
+                type: number
+                minimum: 0
+            required: [category, weight]
+      required: [weights]

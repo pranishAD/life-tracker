@@ -1,0 +1,16 @@
+# Used if a build context is ever created at the repo root.
+# The backend and frontend Dockerfiles use their own .dockerignore
+# (backend/.dockerignore, frontend/.dockerignore) since their build
+# contexts are ./backend and ./frontend respectively.
+
+.git/
+.github/
+docs/
+design/
+e2e/
+.claude/
+**/node_modules/
+**/__pycache__/
+.env
+.env.*
+!.env.example
