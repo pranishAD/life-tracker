@@ -136,3 +136,86 @@ def test_dashboard_attention_list_flags_low_score_goal(client, make_user, make_g
     body = resp.json()
     attention_ids = [a["goal_id"] for a in body["attention"]]
     assert str(goal.id) in attention_ids
+
+
+def test_dashboard_excludes_calibrating_goal_from_rollup(client, make_user, make_goal, auth_headers):
+    """2026-10-15 decision: a Calibrating goal (under 3 days old) must not
+    move category_scores[].score or overall_score -- same treatment as an
+    archived goal -- even though it still shows up in `/goals/{id}/score`
+    (Calibrating, total null) and still appears in the attention list,
+    sorted last.
+    """
+    user = make_user(email="dash7@example.com")
+    today = date.today()
+    headers = auth_headers(user.id)
+
+    # Brand new goal (created_at defaults to "now" -> Calibrating).
+    calibrating_goal = make_goal(
+        user_id=user.id,
+        category=Category.FITNESS,
+        type=GoalType.HABIT,
+        target_value=None,
+        frequency_per_week=7,
+        start_date=today,
+    )
+    client.post(
+        f"/api/v1/goals/{calibrating_goal.id}/check-ins",
+        json={"effort_rating": 5, "logged_for": str(today)},
+        headers=headers,
+    )
+
+    score_resp = client.get(f"/api/v1/goals/{calibrating_goal.id}/score", headers=headers)
+    assert score_resp.status_code == 200
+    score_body = score_resp.json()
+    assert score_body["grade"] == "Calibrating"
+    assert score_body["total"] is None
+
+    resp = client.get("/api/v1/dashboard", headers=headers)
+    body = resp.json()
+    by_category = {c["category"]: c for c in body["category_scores"]}
+
+    # has_active_goals is still true (it IS an active goal), but it never
+    # contributes a numeric score while Calibrating -- same shape as an
+    # archived-only category ("no eligible goals").
+    assert by_category["fitness"]["has_active_goals"] is True
+    assert by_category["fitness"]["score"] is None
+    # Only goal on the account is Calibrating -> nothing eligible anywhere.
+    assert body["overall_score"] is None
+
+    attention_ids = [a["goal_id"] for a in body["attention"]]
+    assert str(calibrating_goal.id) in attention_ids
+
+    # Now add a second, long-established, well-performing goal in a
+    # different category -> overall_score should be computed from that goal
+    # alone, unaffected by the Calibrating one.
+    established_goal = make_goal(
+        user_id=user.id,
+        category=Category.STUDY,
+        type=GoalType.HABIT,
+        target_value=None,
+        frequency_per_week=7,
+        start_date=today - timedelta(days=10),
+        created_at=_aware(today - timedelta(days=10)),
+    )
+    for d in range(10):
+        client.post(
+            f"/api/v1/goals/{established_goal.id}/check-ins",
+            json={"effort_rating": 5, "logged_for": str(today - timedelta(days=d))},
+            headers=headers,
+        )
+
+    resp2 = client.get("/api/v1/dashboard", headers=headers)
+    body2 = resp2.json()
+    by_category2 = {c["category"]: c for c in body2["category_scores"]}
+
+    assert by_category2["fitness"]["score"] is None
+    assert by_category2["study"]["score"] is not None
+    # Equal default category weights -> overall_score is exactly the
+    # (sole eligible) study category's score, the Calibrating fitness goal
+    # contributing nothing to the average.
+    assert body2["overall_score"] == by_category2["study"]["score"]
+
+    attention_ids2 = [a["goal_id"] for a in body2["attention"]]
+    assert str(calibrating_goal.id) in attention_ids2
+    # Calibrating goals sort after any scored goals.
+    assert attention_ids2[-1] == str(calibrating_goal.id)

@@ -22,7 +22,12 @@ picked the simplest sensible rule, flagged in the handoff note):
    counts), not per-goal.
 4. "Needs attention" (US-15): a currently-active, non-Calibrating goal
    qualifies if its score dropped >=10 points over the last 7 days, or its
-   current score is below 50. Sorted worst-first.
+   current score is below 50. Sorted worst-first; currently-active
+   Calibrating goals are appended after those, per design/components.md's
+   dashboard spec ("Order: lowest score first, Calibrating goals last").
+   Calibrating goals never move `category_scores[].score` / `overall_score`
+   though (2026-10-15 decision log) -- same treatment as archived/non-active
+   goals: excluded from the rollup average entirely, not counted as 0.
 5. Weekly review "not enough history": true only if at least one
    active/completed goal existed for the full previous week too (so a
    week-over-week comparison is meaningful for at least one goal). When
@@ -90,13 +95,28 @@ def goal_total_as_of(db: Session, goal: Goal, as_of: date) -> int:
     return score_goal_as_of(goal, check_ins, milestones, as_of).total
 
 
+def goal_rollup_total_as_of(db: Session, goal: Goal, as_of: date) -> Optional[int]:
+    """The goal's total as it should count towards category_score/overall_score
+    on a given day: `None` while the goal is Calibrating as of that day, so
+    callers exclude it from the rollup average entirely (same treatment as a
+    non-scorable/archived goal) instead of folding in a number its own
+    `/goals/{id}/score` wouldn't show yet.
+    """
+    check_ins = load_check_ins(db, goal.id)
+    milestones = load_milestones(db, goal.id)
+    result = score_goal_as_of(goal, check_ins, milestones, as_of)
+    return None if result.grade == "Calibrating" else result.total
+
+
 def overall_score_as_of(db: Session, user_id: uuid.UUID, as_of: date) -> Optional[int]:
     goals = load_scorable_goals(db, user_id, as_of)
     weights_map = get_category_weights_map(db, user_id)
 
     by_category: dict[Category, list[WeightedScore]] = {c: [] for c in Category}
     for g in goals:
-        total = goal_total_as_of(db, g, as_of)
+        total = goal_rollup_total_as_of(db, g, as_of)
+        if total is None:
+            continue
         by_category[g.category].append(WeightedScore(score=total, weight=float(g.weight)))
 
     category_inputs = [
@@ -135,7 +155,10 @@ def build_dashboard(db: Session, user: User, trend_days: int, today: date) -> Da
         result = score_goal_as_of(g, check_ins, milestones, today)
         goal_totals[g.id] = result.total
         goal_grades[g.id] = result.grade
-        by_category[g.category].append(WeightedScore(score=result.total, weight=float(g.weight)))
+        if result.grade != "Calibrating":
+            by_category[g.category].append(
+                WeightedScore(score=result.total, weight=float(g.weight))
+            )
         if g.status == GoalStatus.ACTIVE:
             has_active_by_category[g.category] = True
         all_check_in_days.update(c.logged_for for c in check_ins)
@@ -183,12 +206,26 @@ def _build_attention_list(
     today: date,
 ) -> list[dict]:
     attention: list[dict] = []
+    calibrating: list[dict] = []
     week_ago = today - timedelta(days=7)
 
     for g in goals:
         if g.status != GoalStatus.ACTIVE:
             continue
+
         if goal_grades[g.id] == "Calibrating":
+            # Still surfaced (per design/components.md: "Calibrating goals
+            # last"), just never contends on score and never shown with a
+            # number -- it has none yet.
+            unlock_date = g.created_at.date() + timedelta(days=3)
+            calibrating.append(
+                {
+                    "goal_id": g.id,
+                    "title": g.title,
+                    "score": None,
+                    "reason": f"New goal, grade unlocks {unlock_date.isoformat()}",
+                }
+            )
             continue
 
         total = goal_totals[g.id]
@@ -207,7 +244,7 @@ def _build_attention_list(
             attention.append({"goal_id": g.id, "title": g.title, "score": total, "reason": reason})
 
     attention.sort(key=lambda item: item["score"])
-    return attention
+    return attention + calibrating
 
 
 @dataclass
@@ -284,6 +321,7 @@ __all__ = [
     "get_category_weights_map",
     "load_scorable_goals",
     "goal_total_as_of",
+    "goal_rollup_total_as_of",
     "overall_score_as_of",
     "build_dashboard",
     "build_weekly_review",
