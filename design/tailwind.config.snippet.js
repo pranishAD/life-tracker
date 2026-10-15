@@ -106,6 +106,16 @@ module.exports = {
       },
       maxWidth: {
         content: '1200px',
+        main: '1296px',
+        modal: '520px',
+      },
+      width: {
+        sidebar: '240px',
+        fab: '56px',
+      },
+      height: {
+        tabbar: '72px',
+        fab: '56px',
       },
       keyframes: {
         'ring-fill': {

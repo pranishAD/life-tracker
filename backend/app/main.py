@@ -14,6 +14,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.errors import register_exception_handlers
 from app.routers.auth import router as auth_router
+from app.routers.check_ins import router as check_ins_router
+from app.routers.dashboard import router as dashboard_router
+from app.routers.goals import router as goals_router
+from app.routers.internal import router as internal_router
+from app.routers.milestones import router as milestones_router
+from app.routers.reviews import router as reviews_router
+from app.routers.scoring import router as scoring_router
+from app.routers.settings import router as settings_router
 
 API_PREFIX = "/api/v1"
 
@@ -37,6 +45,14 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     app.include_router(auth_router, prefix=API_PREFIX)
+    app.include_router(goals_router, prefix=API_PREFIX)
+    app.include_router(milestones_router, prefix=API_PREFIX)
+    app.include_router(check_ins_router, prefix=API_PREFIX)
+    app.include_router(scoring_router, prefix=API_PREFIX)
+    app.include_router(dashboard_router, prefix=API_PREFIX)
+    app.include_router(reviews_router, prefix=API_PREFIX)
+    app.include_router(settings_router, prefix=API_PREFIX)
+    app.include_router(internal_router, prefix=API_PREFIX)
 
     return app
 

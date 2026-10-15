@@ -24,6 +24,7 @@ tags:
   - name: reviews
   - name: settings
   - name: health
+  - name: internal
 
 paths:
   /health:
@@ -524,12 +525,48 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /internal/daily-snapshot:
+    get:
+      tags: [internal]
+      summary: Compute and store today's score snapshot for every active goal of every user
+      description: >
+        Not user-facing. Triggered once a day by Vercel Cron (which only ever
+        sends GET requests). Protected by `cronAuth`: compares the
+        `Authorization: Bearer <token>` header against the server's
+        `CRON_SECRET` env var, not a user JWT — no end-user ever calls this.
+      security:
+        - cronAuth: []
+      responses:
+        "200":
+          description: Snapshot run completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshots_written:
+                    type: integer
+                    example: 42
+                required: [snapshots_written]
+        "401":
+          description: Missing or wrong CRON_SECRET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    cronAuth:
+      type: http
+      scheme: bearer
+      description: >
+        Compared against the server's CRON_SECRET env var, not a user JWT.
+        Used only by /internal/daily-snapshot.
 
   responses:
     Unauthorized:
@@ -1041,6 +1078,7 @@ components:
                 $ref: "#/components/schemas/Category"
               weight:
                 type: number
-                minimum: 0
+                exclusiveMinimum: 0
+                description: Must be greater than 0 (matches the DB's CHECK (weight > 0))
             required: [category, weight]
       required: [weights]

@@ -40,3 +40,8 @@ build/
 
 # Vercel CLI (created by `vercel link` / `vercel dev` — has project/org IDs)
 .vercel/
+
+# Raw design export archive -- the extracted/curated files in design/ are
+# the source of truth (tokens.json, components.md, screens/, screens-html/);
+# the zip is just the designer chat's raw download, not meant to be tracked.
+design/bihan-design.zip

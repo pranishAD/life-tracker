@@ -90,8 +90,14 @@ since they all go through Docker).
 | View logs (one service) | `docker compose logs -f backend` |
 | Shell into the backend container | `docker compose exec backend bash` |
 | Shell into the frontend container | `docker compose exec frontend sh` |
-| Run backend tests | `docker compose exec backend pytest` |
+| Run backend tests | `docker compose exec -e TEST_DATABASE_URL=postgresql+psycopg2://lifetracker:lifetracker@db:5432/life_tracker_test backend pytest` |
 | Run frontend tests | `docker compose exec frontend npm run test -- --run` |
+
+Backend tests always require `TEST_DATABASE_URL` set explicitly to a database
+whose name contains "test" (see `backend/tests/conftest.py`'s module
+docstring) — the `backend` container's own `DATABASE_URL` points at the real
+dev database, and `pytest` refuses to start rather than risk running against
+it.
 
 ### Database migrations (Alembic)
 

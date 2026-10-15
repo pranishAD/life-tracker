@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # Comma-separated list of allowed origins, e.g.
     # "http://localhost:5173,https://bihan.vercel.app"
     cors_origins: str = "http://localhost:5173"
+    # Shared secret for GET /internal/daily-snapshot (Vercel Cron). Empty by
+    # default (local dev never runs the cron) -- an empty secret means the
+    # endpoint always rejects requests (see app/routers/internal.py), it is
+    # never treated as "no auth required".
+    cron_secret: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 
