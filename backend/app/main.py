@@ -1,29 +1,44 @@
-# Placeholder FastAPI app created by devops for Phase 0/2 so that
-# `docker compose up` is verifiable end-to-end before backend-dev builds
-# the real app.
-#
-# backend-dev: this file is yours from here — add routers (auth, goals,
-# check-ins, dashboard, reviews, settings), settings/config loading from
-# env vars (DATABASE_URL, JWT_SECRET, JWT_EXPIRES_MINUTES, CORS_ORIGINS),
-# and wire up SQLAlchemy / Alembic. Please keep `GET /api/v1/health`
-# working — devops and CI use it as the smoke test.
+"""FastAPI app factory for Life Tracker.
+
+`app` (module-level, below) is what `uvicorn app.main:app` and the test
+suite's TestClient both use. Kept as a factory function (`create_app`) so
+tests can build fresh app instances with dependency overrides without
+import-order headaches.
+"""
+
+from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Life Tracker API")
+from app.config import get_settings
+from app.errors import register_exception_handlers
+from app.routers.auth import router as auth_router
 
-# TODO(backend-dev): read allowed origins from the CORS_ORIGINS env var
-# instead of allowing all origins.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+API_PREFIX = "/api/v1"
 
 
-@app.get("/api/v1/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def create_app() -> FastAPI:
+    settings = get_settings()
+    app = FastAPI(title="Life Tracker API")
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    register_exception_handlers(app)
+
+    @app.get(f"{API_PREFIX}/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    app.include_router(auth_router, prefix=API_PREFIX)
+
+    return app
+
+
+app = create_app()
