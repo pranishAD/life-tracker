@@ -1078,6 +1078,7 @@ components:
                 $ref: "#/components/schemas/Category"
               weight:
                 type: number
-                minimum: 0
+                exclusiveMinimum: 0
+                description: Must be greater than 0 (matches the DB's CHECK (weight > 0))
             required: [category, weight]
       required: [weights]

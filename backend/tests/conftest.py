@@ -143,6 +143,66 @@ def make_user(db_session: Session):
 
 
 @pytest.fixture()
+def make_goal(db_session: Session):
+    """Factory fixture: create+flush a goal for a given user with sane
+    defaults per type, so individual tests only need to override what they
+    actually care about.
+    """
+    from datetime import date
+    from decimal import Decimal
+
+    from app.models import Category, Goal, GoalStatus, GoalType
+
+    def _make_goal(
+        *,
+        user_id: uuid.UUID,
+        title: str = "Test goal",
+        category: Category = Category.FITNESS,
+        type: GoalType = GoalType.NUMERIC,
+        target_value: "Decimal | None" = Decimal("100"),
+        current_value: "Decimal | None" = Decimal("0"),
+        unit: str | None = "kg",
+        frequency_per_week: int | None = None,
+        start_date: "date | None" = None,
+        deadline: "date | None" = None,
+        weight: Decimal = Decimal("1"),
+        status: GoalStatus = GoalStatus.ACTIVE,
+        created_at: "object | None" = None,
+    ) -> Goal:
+        if type == GoalType.HABIT and frequency_per_week is None:
+            frequency_per_week = 5
+        if type != GoalType.NUMERIC:
+            target_value = None
+            current_value = None
+            unit = None
+
+        goal = Goal(
+            user_id=user_id,
+            title=title,
+            category=category,
+            type=type,
+            target_value=target_value,
+            current_value=current_value,
+            unit=unit,
+            frequency_per_week=frequency_per_week,
+            start_date=start_date or date.today(),
+            deadline=deadline,
+            weight=weight,
+            status=status,
+        )
+        db_session.add(goal)
+        db_session.commit()
+        db_session.refresh(goal)
+        if created_at is not None:
+            goal.created_at = created_at
+            db_session.commit()
+            db_session.refresh(goal)
+        return goal
+
+    return _make_goal
+
+
+@pytest.fixture()
 def auth_headers():
     """Factory fixture: Authorization header dict for a given user id, using
     the app's own token creation so tests don't duplicate JWT internals.
