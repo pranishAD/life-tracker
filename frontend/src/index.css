@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Bihan is dark-only for v1 (design/components.md "Global rules"). */
+html,
+body {
+  background: #0a0a0f;
+  color: #f4f4f7;
+}
+
+body {
+  @apply font-sans antialiased;
+}
