@@ -20,6 +20,9 @@ passlib[bcrypt]==1.7.*
 # db/seed.py / handoff note (db-architect) for how this was found.
 bcrypt==4.0.1
 python-multipart==0.0.*
+# Required for pydantic's EmailStr (RegisterRequest/LoginRequest.email,
+# matching api-contract.yaml's `format: email`) -- added by backend-dev.
+email-validator==2.*
 
 # testing
 pytest==8.*
