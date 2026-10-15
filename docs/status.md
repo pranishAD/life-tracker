@@ -4,15 +4,15 @@ Updated by the orchestrator after every phase or major task.
 
 Last updated: 2026-10-15
 
-## Current phase: 6. Launch (deploy config done on branch phase-6/deploy, not yet merged — awaiting Aayush's own Neon/Vercel setup)
+## Current phase: 6. Launch (deploy config approved and merged to main; Aayush doing the real Neon/Vercel setup himself next)
 
 Aayush chose to jump from Phase 4 straight to Phase 6 (deploy config); Phase 5 (QA + polish) has not started yet and remains next after launch is live.
 
-Phase 0, 2, and 4 approved by Aayush on 2026-10-15. App name is Bihan. Deploy target changed mid-Phase-6 to **one Vercel project using Vercel Services** (not two separate Hobby projects) + Neon free Postgres — see docs/decisions.md and docs/deploy.md.
+Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Deploy target changed mid-Phase-6 to **one Vercel project using Vercel Services** (not two separate Hobby projects) + Neon free Postgres — see docs/decisions.md and docs/deploy.md.
 
 | Agent | Status | Current task |
 |---|---|---|
-| orchestrator | Done (this task) | Researched current Vercel Services schema, branched phase-6/deploy, ran + reviewed devops + frontend-dev's deploy work |
+| orchestrator | Done (this task) | Researched current Vercel Services schema, branched phase-6/deploy, ran + reviewed devops + frontend-dev's deploy work, merged to main |
 | product-planner | Done (Phase 0) | docs/prd.md + docs/user-stories.md (US-01..US-19, EC-01..EC-10) |
 | devops | Done (Phase 6) | Root vercel.json (Vercel Services: frontend + backend), removed old per-folder vercel.json files, docs/deploy.md, README Deployment section rewritten |
 | scoring-engine | Done (Phase 0) | backend/scoring/* + 71 passing tests + README with worked example |
@@ -46,7 +46,7 @@ Phase 0, 2, and 4 approved by Aayush on 2026-10-15. App name is Bihan. Deploy ta
 - 44 frontend unit/component tests passing, clean `npm run build` — frontend-dev
 - Verified independently via a real Playwright session against the live Docker stack (not npm run dev in isolation): login, dashboard, goals list, goal detail, a real check-in submit with live score recalculation, weekly review, settings, mobile layout — orchestrator
 
-## Phase 6 deliverables so far (on branch phase-6/deploy, not yet merged)
+## Phase 6 deliverables so far (approved, merged to main)
 - Root `vercel.json`: one Vercel project, Vercel Services (`frontend` + `backend`), schema verified against current Vercel docs — devops
 - `backend/vercel.json` and `frontend/vercel.json` removed (replaced by the root file) — devops
 - `docs/deploy.md`: full Neon + Vercel + env var + migration walkthrough — devops
