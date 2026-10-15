@@ -54,13 +54,24 @@ interface ApiFetchOptions {
 }
 
 function buildUrl(path: string, query?: ApiFetchOptions["query"]): string {
-  const url = new URL(API_URL + path);
+  // We can't use `new URL(API_URL + path)` here: the `URL` constructor
+  // requires an absolute base and throws `TypeError: Invalid URL` when
+  // `API_URL` is a relative path like "/api/v1" (production, same-origin
+  // Vercel deploy). Building the string by hand works for both an absolute
+  // URL (local dev) and a relative one (production).
+  const base = API_URL.replace(/\/$/, ""); // strip trailing slash, if any
+  let url = base + path;
+
   if (query) {
+    const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined) url.searchParams.set(key, String(value));
+      if (value !== undefined) params.set(key, String(value));
     }
+    const qs = params.toString();
+    if (qs) url += `?${qs}`;
   }
-  return url.toString();
+
+  return url;
 }
 
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
