@@ -4,18 +4,18 @@ Updated by the orchestrator after every phase or major task.
 
 Last updated: 2026-10-15
 
-## Current phase: 2. Foundation (done, awaiting Aayush approval)
+## Current phase: 3. Core backend (in progress)
 
-Phase 0 approved by Aayush on 2026-10-15. App name is Bihan. Deploy target changed to Vercel Hobby (x2) + Neon free Postgres (also 2026-10-15) — see docs/decisions.md.
+Phase 0 and Phase 2 approved by Aayush on 2026-10-15. App name is Bihan. Deploy target is Vercel Hobby (x2) + Neon free Postgres — see docs/decisions.md.
 
 | Agent | Status | Current task |
 |---|---|---|
-| orchestrator | Done | Merged phase-0/spec to main, branched phase-2/foundation, ran + reviewed Phase 2 |
+| orchestrator | In progress | Merged phase-2/foundation to main, branched phase-3/core-backend, added GET /internal/daily-snapshot to api-contract.yaml, running Phase 3 |
 | product-planner | Done (Phase 0) | docs/prd.md + docs/user-stories.md (US-01..US-19, EC-01..EC-10) |
-| devops | Done | Re-verified Docker end-to-end; scaffolded backend/vercel.json + frontend/vercel.json, updated .env.example + README Deployment section for Vercel/Neon |
+| devops | Done (Phase 2) | Docker verified; Vercel/Neon deploy scaffolding |
 | scoring-engine | Done (Phase 0) | backend/scoring/* + 71 passing tests + README with worked example |
-| db-architect | Done | SQLAlchemy models, Alembic migration, seed script (169 real score snapshots), NullPool/Neon-ready session.py |
-| backend-dev | Done (this task) | FastAPI app setup, error format, auth (register/login/me/PATCH me) + 18 tests, all passing against real Postgres |
+| db-architect | Done (Phase 2) | SQLAlchemy models, Alembic migration, seed script, NullPool/Neon-ready session.py |
+| backend-dev | In progress | Goals, milestones, check-ins, scoring, dashboard, weekly review, category weights, GET /internal/daily-snapshot — all wired to backend/scoring/ |
 | frontend-dev | Waiting | design/tokens.json + components.md landed (2026-10-15) — still blocked on the 6 screen layouts before Phase 4 can start |
 | qa-tester | Waiting | After Phase 4 (frontend) for e2e; test-plan.md can start anytime against user-stories.md |
 | Designer (separate chat) | In progress | Design system (tokens/components) done; 6 screen layouts (Login, Dashboard, Goals list, Goal detail, Check-in modal, Weekly review) not designed yet |
