@@ -48,7 +48,7 @@ OUT of scope for v1 (v2 backlog): AI coach feedback, push/email reminders, Googl
 
 Serverless constraints this implies for backend/db code (applies from Phase 2 onward):
 - DB connections: read `DATABASE_URL` from env; support Neon's pooled connection string with `sslmode=require`; use a small pool or `NullPool` suitable for short-lived serverless function instances.
-- No background processes or in-process schedulers. Any recurring job (e.g. the daily score-snapshot job) must be a regular HTTP endpoint (e.g. `POST /api/v1/internal/daily-snapshot`) protected by a `CRON_SECRET` env var, invoked by Vercel Cron.
+- No background processes or in-process schedulers. Any recurring job (e.g. the daily score-snapshot job) must be a regular HTTP endpoint (e.g. `GET /api/v1/internal/daily-snapshot`) protected by a `CRON_SECRET` env var, invoked by Vercel Cron. Vercel Cron only ever sends `GET` requests, so this endpoint must accept `GET` (confirmed from Vercel's current docs — not `POST`, despite that being the more RESTful-looking verb for a side-effecting action).
 - Alembic migrations are run manually from a developer machine against Neon — never as part of the Vercel deploy/build step.
 - CORS must allow the frontend's deployed Vercel URL via the existing `CORS_ORIGINS` env var.
 
@@ -139,7 +139,7 @@ life-tracker/
 | 3. Core backend | Goals, milestones, check-ins, dashboard, weekly review APIs wired to scoring | backend-dev | All endpoints pass pytest |
 | 4. Frontend | All pages built against the API | frontend-dev | Full loop works in browser |
 | 5. QA + polish | Test plan, e2e tests, bug fixes, responsive check | qa-tester, then owners fix | No critical bugs |
-| 6. Launch | Deploy: frontend to Vercel Hobby, backend to Vercel Hobby (second project, serverless functions), DB to Neon free Postgres; wire Vercel Cron -> `POST /api/v1/internal/daily-snapshot` | devops | Live URL works, daily snapshot cron fires |
+| 6. Launch | Deploy: frontend to Vercel Hobby, backend to Vercel Hobby (second project, serverless functions), DB to Neon free Postgres; wire Vercel Cron -> `GET /api/v1/internal/daily-snapshot` | devops | Live URL works, daily snapshot cron fires |
 
 Phases 0 and 1 run in parallel: the Designer chat works while Claude Code does the spec + skeleton + scoring.
 

@@ -37,3 +37,6 @@ Thumbs.db
 dist/
 build/
 *.tsbuildinfo
+
+# Vercel CLI (created by `vercel link` / `vercel dev` — has project/org IDs)
+.vercel/
