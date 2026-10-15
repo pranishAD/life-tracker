@@ -4,21 +4,21 @@ Updated by the orchestrator after every phase or major task.
 
 Last updated: 2026-10-15
 
-## Current phase: 2. Foundation (starting)
+## Current phase: 2. Foundation (done, awaiting Aayush approval)
 
-Phase 0 approved by Aayush on 2026-10-15. App name is Bihan.
+Phase 0 approved by Aayush on 2026-10-15. App name is Bihan. Deploy target changed to Vercel Hobby (x2) + Neon free Postgres (also 2026-10-15) — see docs/decisions.md.
 
 | Agent | Status | Current task |
 |---|---|---|
-| orchestrator | In progress | Merging phase-0/spec to main, branching phase-2/foundation, running Phase 2 |
+| orchestrator | Done | Merged phase-0/spec to main, branched phase-2/foundation, ran + reviewed Phase 2 |
 | product-planner | Done (Phase 0) | docs/prd.md + docs/user-stories.md (US-01..US-19, EC-01..EC-10) |
-| devops | Starting | Re-verify `docker compose up --build` + health endpoint on Phase 2 branch |
+| devops | Done | Re-verified Docker end-to-end; scaffolded backend/vercel.json + frontend/vercel.json, updated .env.example + README Deployment section for Vercel/Neon |
 | scoring-engine | Done (Phase 0) | backend/scoring/* + 71 passing tests + README with worked example |
-| db-architect | Starting | SQLAlchemy models, Alembic migrations, seed script |
-| backend-dev | Waiting | After db-architect — app setup, error format, auth (register/login/me) + tests |
-| frontend-dev | Waiting | After design/tokens.json + api-contract.yaml (contract ready; still blocked on design) |
+| db-architect | Done | SQLAlchemy models, Alembic migration, seed script (169 real score snapshots), NullPool/Neon-ready session.py |
+| backend-dev | Done (this task) | FastAPI app setup, error format, auth (register/login/me/PATCH me) + 18 tests, all passing against real Postgres |
+| frontend-dev | Waiting | design/tokens.json + components.md landed (2026-10-15) — still blocked on the 6 screen layouts before Phase 4 can start |
 | qa-tester | Waiting | After Phase 4 (frontend) for e2e; test-plan.md can start anytime against user-stories.md |
-| Designer (separate chat) | Ready | Design system + 6 screens — not yet dropped into design/ |
+| Designer (separate chat) | In progress | Design system (tokens/components) done; 6 screen layouts (Login, Dashboard, Goals list, Goal detail, Check-in modal, Weekly review) not designed yet |
 
 ## Phase 0 deliverables (all done)
 - docs/prd.md, docs/user-stories.md — product-planner
@@ -26,10 +26,18 @@ Phase 0 approved by Aayush on 2026-10-15. App name is Bihan.
 - Repo skeleton, docker-compose.yml, CI, README, .env.example — devops
 - backend/scoring/ + backend/tests/scoring/ (71 tests passing) — scoring-engine
 
+## Phase 2 deliverables (all done, on branch phase-2/foundation)
+- SQLAlchemy models, Alembic migration, seed script, Neon-ready (NullPool) session.py — db-architect
+- Docker re-verified end-to-end; Vercel + Neon deploy scaffolding (vercel.json x2, README Deployment section, .env.example) — devops
+- FastAPI app (CORS, error-shape handlers), auth endpoints (register/login/me/PATCH me) + 18 tests — backend-dev
+- 89/89 backend tests passing (71 scoring + 18 auth); every endpoint also manually curl-verified by the orchestrator against the live Docker stack
+
 ## Known gaps / verification notes
-- `docker compose up --build` confirmed working by Aayush on his own machine (2026-10-15). devops will re-confirm health endpoint on the phase-2/foundation branch.
-- frontend-dev is still blocked on `design/tokens.json` (design/ currently only has a README) — this blocks Phase 4, not Phase 2.
+- `docker compose up --build` confirmed working by Aayush and re-verified in-sandbox (2026-10-15).
+- Vercel deploy config (backend/vercel.json, frontend/vercel.json) is based on current Vercel docs but **not yet verified against a real Vercel/Neon deploy** — that happens in Phase 6. Not a Phase 2 blocker.
+- frontend-dev is unblocked on tokens/components but still blocked on the 6 screen layouts (design/components.md § Screens: "Not designed yet") — blocks Phase 4, not Phase 2.
+- Daily-snapshot endpoint (Phase 3) must be `GET /api/v1/internal/daily-snapshot`, not POST — Vercel Cron only sends GET (docs/decisions.md 2026-10-15).
 
 ## Open questions for Aayush
 1. ~~Final app name?~~ Bihan (decided 2026-10-15)
-2. Design vibe / reference apps?
+2. 6 screen layouts from the design chat — when ready, drop into design/ to unblock Phase 4.
