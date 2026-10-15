@@ -4,7 +4,7 @@ Updated by the orchestrator after every phase or major task.
 
 Last updated: 2026-10-15
 
-## Current phase: 4. Frontend (starting)
+## Current phase: 4. Frontend (done, awaiting Aayush approval)
 
 Phase 0 and Phase 2 approved by Aayush on 2026-10-15. App name is Bihan. Deploy target is Vercel Hobby (x2) + Neon free Postgres — see docs/decisions.md.
 
@@ -16,8 +16,8 @@ Phase 0 and Phase 2 approved by Aayush on 2026-10-15. App name is Bihan. Deploy 
 | scoring-engine | Done (Phase 0) | backend/scoring/* + 71 passing tests + README with worked example |
 | db-architect | Done (Phase 2) | SQLAlchemy models, Alembic migration, seed script, NullPool/Neon-ready session.py |
 | backend-dev | Done | All 16 api-contract.yaml paths + daily-snapshot cron, Calibrating-goal rollup fix, and a data-safety fix to the test suite (see docs/decisions.md). 179/179 tests passing |
-| frontend-dev | In progress | Building all pages against design/ (tokens, components, 6 screens) and the live backend |
-| qa-tester | Waiting | After Phase 4 (frontend) for e2e; test-plan.md can start anytime against user-stories.md |
+| frontend-dev | Done | All 6 screens + empty/Calibrating states + Settings, wired to the live backend. 44 tests passing, clean build |
+| qa-tester | Waiting | Phase 5 — test-plan.md + Playwright e2e against user-stories.md |
 | Designer (separate chat) | Done | Tokens, components, and all 6 screens (desktop + mobile) delivered |
 
 ## Phase 0 deliverables (all done)
@@ -38,11 +38,19 @@ Phase 0 and Phase 2 approved by Aayush on 2026-10-15. App name is Bihan. Deploy 
 - GET /internal/daily-snapshot, CRON_SECRET-protected, no background process — backend-dev
 - 170/170 backend tests passing (71 scoring + 18 auth + 81 new); full manual curl walkthrough of the create-goal -> check-in -> score -> dashboard -> weekly-review -> settings loop, verified by the orchestrator
 
+## Phase 4 deliverables (all done, on branch phase-4/frontend)
+- All 6 designed screens + empty/Calibrating states + a Settings page, matching design/ closely — frontend-dev
+- Typed API client, TanStack Query, auth via localStorage + auto-logout on 401, responsive mobile/desktop — frontend-dev
+- 44 frontend unit/component tests passing, clean `npm run build` — frontend-dev
+- Verified independently via a real Playwright session against the live Docker stack (not npm run dev in isolation): login, dashboard, goals list, goal detail, a real check-in submit with live score recalculation, weekly review, settings, mobile layout — orchestrator
+
 ## Known gaps / verification notes
 - `docker compose up --build` confirmed working by Aayush and re-verified in-sandbox (2026-10-15).
 - Vercel deploy config (backend/vercel.json, frontend/vercel.json) is based on current Vercel docs but **not yet verified against a real Vercel/Neon deploy** — that happens in Phase 6. Not a blocker so far.
 - Calibrating goals excluded from dashboard rollups, resolved 2026-10-15 — see docs/decisions.md.
 - A real data-safety bug (test suite could silently wipe the dev DB) was found and fixed 2026-10-15 — see docs/decisions.md. Always run backend tests with `TEST_DATABASE_URL` explicitly set (backend/tests/conftest.py now enforces this).
+- Frontend gaps (none blocking the Phase 4 gate, all documented in frontend-dev's handoff): no live check-in score-preview (no backend field to predict it); weekly review's past-week category/daily breakdown isn't available from the API; dashboard hero card approximates active-goal-count via a second query since `/dashboard` doesn't return it; one 674KB JS bundle (code-splitting is a Phase 6 concern).
+- `docs/api-contract.yaml`'s `/goals/{id}/score-history` only allows `days=7|30`, but the design mock shows a 14D option — frontend-dev used 7D/30D to match the actual contract. Would need a contract change if 14D is wanted later.
 
 ## Open questions for Aayush
 1. ~~Final app name?~~ Bihan (decided 2026-10-15)
