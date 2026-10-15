@@ -7,3 +7,7 @@ Format: date — decision — why — who approved.
 - 2026-10-14 — Code agents run as Claude Code subagents under one orchestrator; Designer runs in a separate claude.ai chat — agents share the repo instead of copy-paste — Aayush
 - 2026-10-14 — docs/api-contract.yaml (OpenAPI 3.1) written by orchestrator from master-plan section 6 + user-stories.md — 15 paths, 24 schemas, Bearer JWT auth, {error:{code,message}} error shape — pending Aayush review
 - 2026-10-14 — Scoring engine resolves 7 ambiguities in master-plan section 4 (per-type pace progress, non-habit consistency defaults to 1/week, momentum uses check-in/milestone count not value deltas, streak definition, frozen-score mechanics, archived goals excluded not zeroed, date vs datetime) — documented in backend/scoring/README.md — pending Aayush thumbs-up, does not change formula weights or schema
+- 2026-10-15 — App name: Bihan (replaces working name "Life Tracker") — Aayush
+- 2026-10-15 — Phase 0 (spec) approved as delivered — Aayush
+- 2026-10-15 — Scoring engine's 7 interpretations (backend/scoring/README.md § Interpretations) approved as written, no changes — Aayush
+- 2026-10-15 — `docker compose up --build` confirmed working on Aayush's own machine; Phase 2 foundation work can proceed — Aayush
