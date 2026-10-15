@@ -4,7 +4,9 @@ Updated by the orchestrator after every phase or major task.
 
 Last updated: 2026-10-15
 
-## Current phase: 4. Frontend (done, awaiting Aayush approval)
+## Current phase: 5. QA + polish (not started)
+
+Phase 4 approved and merged to main on 2026-10-15.
 
 Phase 0 and Phase 2 approved by Aayush on 2026-10-15. App name is Bihan. Deploy target is Vercel Hobby (x2) + Neon free Postgres — see docs/decisions.md.
 
@@ -16,8 +18,8 @@ Phase 0 and Phase 2 approved by Aayush on 2026-10-15. App name is Bihan. Deploy 
 | scoring-engine | Done (Phase 0) | backend/scoring/* + 71 passing tests + README with worked example |
 | db-architect | Done (Phase 2) | SQLAlchemy models, Alembic migration, seed script, NullPool/Neon-ready session.py |
 | backend-dev | Done | All 16 api-contract.yaml paths + daily-snapshot cron, Calibrating-goal rollup fix, and a data-safety fix to the test suite (see docs/decisions.md). 179/179 tests passing |
-| frontend-dev | Done | All 6 screens + empty/Calibrating states + Settings, wired to the live backend. 44 tests passing, clean build |
-| qa-tester | Waiting | Phase 5 — test-plan.md + Playwright e2e against user-stories.md |
+| frontend-dev | Done (Phase 4) | All 6 screens + empty/Calibrating states + Settings, wired to the live backend. 44 tests passing, clean build |
+| qa-tester | Ready to start | Phase 5 — test-plan.md + Playwright e2e against user-stories.md |
 | Designer (separate chat) | Done | Tokens, components, and all 6 screens (desktop + mobile) delivered |
 
 ## Phase 0 deliverables (all done)
@@ -49,8 +51,7 @@ Phase 0 and Phase 2 approved by Aayush on 2026-10-15. App name is Bihan. Deploy 
 - Vercel deploy config (backend/vercel.json, frontend/vercel.json) is based on current Vercel docs but **not yet verified against a real Vercel/Neon deploy** — that happens in Phase 6. Not a blocker so far.
 - Calibrating goals excluded from dashboard rollups, resolved 2026-10-15 — see docs/decisions.md.
 - A real data-safety bug (test suite could silently wipe the dev DB) was found and fixed 2026-10-15 — see docs/decisions.md. Always run backend tests with `TEST_DATABASE_URL` explicitly set (backend/tests/conftest.py now enforces this).
-- Frontend gaps (none blocking the Phase 4 gate, all documented in frontend-dev's handoff): no live check-in score-preview (no backend field to predict it); weekly review's past-week category/daily breakdown isn't available from the API; dashboard hero card approximates active-goal-count via a second query since `/dashboard` doesn't return it; one 674KB JS bundle (code-splitting is a Phase 6 concern).
-- `docs/api-contract.yaml`'s `/goals/{id}/score-history` only allows `days=7|30`, but the design mock shows a 14D option — frontend-dev used 7D/30D to match the actual contract. Would need a contract change if 14D is wanted later.
+- Frontend gaps — Aayush has decided to leave these as-is for now, not fixing before Phase 5: no live check-in score-preview (no backend field to predict it); weekly review's past-week category/daily breakdown isn't available from the API; dashboard hero card approximates active-goal-count via a second query since `/dashboard` doesn't return it; one 674KB JS bundle (code-splitting is a Phase 6 concern). `/goals/{id}/score-history`'s 7D/30D-only limit (vs. the design's 14D mock) is the same kind of deferred gap.
 
 ## Open questions for Aayush
 1. ~~Final app name?~~ Bihan (decided 2026-10-15)
