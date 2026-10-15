@@ -88,4 +88,49 @@ describe("apiFetch error handling", () => {
     expect(handler).toHaveBeenCalledOnce();
     window.removeEventListener(UNAUTHORIZED_EVENT, handler);
   });
+
+  it("builds a request against an absolute VITE_API_URL (local dev, unchanged)", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    await apiFetch("/goals", { query: { status: "active" } });
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/v1/goals?status=active");
+  });
+});
+
+// `API_URL` is read once at module load from `import.meta.env.VITE_API_URL`,
+// so to exercise a different value (the production, same-origin case) we
+// stub the env var, reset the module registry, and re-import the module —
+// that gives us a fresh `client.ts` instance that picks up the new value.
+describe("apiFetch with a relative VITE_API_URL (production, Vercel Services)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.stubGlobal("fetch", vi.fn());
+    vi.stubEnv("VITE_API_URL", "/api/v1");
+    vi.resetModules();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("does not throw and builds a same-origin relative path instead of an absolute URL", async () => {
+    const { apiFetch: apiFetchWithRelativeUrl } = await import("./client");
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+
+    await expect(apiFetchWithRelativeUrl("/dashboard")).resolves.toEqual({ ok: true });
+
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("/api/v1/dashboard");
+  });
+
+  it("still appends query params correctly on a relative base", async () => {
+    const { apiFetch: apiFetchWithRelativeUrl } = await import("./client");
+    vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+
+    await apiFetchWithRelativeUrl("/goals", { query: { status: "active", page: 2 } });
+
+    const [url] = vi.mocked(fetch).mock.calls[0];
+    expect(url).toBe("/api/v1/goals?status=active&page=2");
+  });
 });
