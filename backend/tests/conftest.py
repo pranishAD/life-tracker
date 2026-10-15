@@ -8,12 +8,43 @@ outer transaction that is rolled back afterwards, so tests are isolated from
 each other but still exercise the actual SQLAlchemy models / constraints /
 case-insensitive unique index, etc.
 
-Connection target: `TEST_DATABASE_URL` env var if set, else `DATABASE_URL`
-with a few env vars for JWT secrets etc seeded with safe test defaults (same
-approach the CI workflow uses -- see .github/workflows/ci.yml). Defaults to
-the docker-compose `db` service's host-mapped port with a separate
-`life_tracker_test` database so running tests never touches the dev
-`life_tracker` database.
+SAFETY: `_db_schema` below runs `Base.metadata.drop_all()` + `create_all()`
+(and `drop_all()` again at teardown) against whatever `TEST_DATABASE_URL`
+resolves to. An earlier version of this file resolved that target as
+`TEST_DATABASE_URL` env var if set, else the ambient `DATABASE_URL`. Inside
+the `backend` Docker service `DATABASE_URL` is *always* set (docker-compose
+points it at the real dev `life_tracker` database), so running pytest in that
+container without explicitly exporting `TEST_DATABASE_URL` silently dropped
+every table in the real dev database -- this is exactly what happened once
+and wiped `life_tracker` down to a bare `alembic_version` table. To make that
+impossible to repeat silently:
+
+- `TEST_DATABASE_URL` is never derived from the ambient `DATABASE_URL`. If
+  unset, it falls back to a hardcoded, safe-by-construction default
+  (`life_tracker_test` on localhost) -- never to whatever `DATABASE_URL`
+  happens to be.
+- Whatever URL it resolves to (explicit or default) is validated at import
+  time, below, before `_engine`/`_db_schema` exist: the database name must
+  contain "test" (case-insensitive) or we raise `RuntimeError` immediately,
+  failing test collection rather than risking a `drop_all()` against the
+  wrong database.
+- `DATABASE_URL` is then set *from* the validated `TEST_DATABASE_URL` (safe
+  direction: a known-safe test URL overwrites whatever `DATABASE_URL` was),
+  never the other way around.
+
+Whoever runs pytest against a real Postgres (locally or via
+`docker compose exec backend pytest`) MUST export `TEST_DATABASE_URL`
+explicitly to a URL whose database name contains "test", e.g.:
+
+    TEST_DATABASE_URL=postgresql+psycopg2://lifetracker:lifetracker@localhost:5432/life_tracker_test \\
+        pytest backend/tests -q
+
+    docker compose exec -e TEST_DATABASE_URL=postgresql+psycopg2://lifetracker:lifetracker@db:5432/life_tracker_test \\
+        backend pytest tests -q
+
+Relying on the hardcoded default is fine too (it already contains "test"),
+but never rely on `DATABASE_URL` alone -- it is not validated here and, in
+every real deployment of this repo, points at a non-test database.
 """
 
 from __future__ import annotations
@@ -25,6 +56,10 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
+from fastapi.testclient import TestClient
 
 # Make `app`, `db`, `scoring` importable regardless of invocation cwd, same
 # shim pattern as backend/tests/scoring/conftest.py, backend/db/seed.py and
@@ -33,22 +68,53 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-os.environ.setdefault(
-    "DATABASE_URL",
-    os.environ.get(
-        "TEST_DATABASE_URL",
-        "postgresql+psycopg2://lifetracker:lifetracker@localhost:5432/life_tracker_test",
-    ),
+_DEFAULT_TEST_DATABASE_URL = (
+    "postgresql+psycopg2://lifetracker:lifetracker@localhost:5432/life_tracker_test"
 )
+
+
+def _assert_test_database_url_is_safe(url: str) -> None:
+    """Fail loud and immediately (at collection time, not inside a fixture)
+    if `url` doesn't look like a dedicated test database.
+
+    This is the guard against the incident described in the module docstring:
+    a `TEST_DATABASE_URL` that silently resolves to a real/dev database would
+    otherwise only surface as data loss, after the fact, inside
+    `_db_schema`'s `drop_all()`.
+    """
+    try:
+        database_name = make_url(url).database or ""
+    except Exception as exc:  # pragma: no cover - malformed URL is obvious misuse
+        raise RuntimeError(
+            f"TEST_DATABASE_URL is not a valid database URL: {url!r} ({exc})"
+        ) from exc
+
+    if "test" not in database_name.lower():
+        raise RuntimeError(
+            "Refusing to run DB-backed tests: the resolved test database "
+            f"({database_name!r}, from {url!r}) does not have 'test' in its "
+            "name. This check exists because TEST_DATABASE_URL silently "
+            "falling back to the ambient DATABASE_URL once wiped the real "
+            "dev database via Base.metadata.drop_all(). Set TEST_DATABASE_URL "
+            "explicitly to a database whose name contains 'test', e.g. "
+            "postgresql+psycopg2://lifetracker:lifetracker@localhost:5432/life_tracker_test "
+            "-- see this file's module docstring."
+        )
+
+
+# Never derive this from the ambient DATABASE_URL -- see module docstring.
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", _DEFAULT_TEST_DATABASE_URL)
+_assert_test_database_url_is_safe(TEST_DATABASE_URL)
+
+# Safe direction only: a validated-safe test URL overwrites DATABASE_URL, so
+# anything in the app that happens to read DATABASE_URL during a test run
+# (e.g. app/config.py's Settings) sees the test database too, not whatever
+# DATABASE_URL was set to by the ambient environment (e.g. docker-compose's
+# real dev DB inside the backend container).
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ.setdefault("JWT_SECRET", "test-only-secret")
 os.environ.setdefault("JWT_EXPIRES_MINUTES", "60")
 os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
-
-TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL", os.environ["DATABASE_URL"])
-
-from sqlalchemy import create_engine, event  # noqa: E402
-from sqlalchemy.orm import Session  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 
 from app.main import create_app  # noqa: E402
 from app.models import Base, User  # noqa: E402
