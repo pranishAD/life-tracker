@@ -22,7 +22,7 @@ Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Depl
 | qa-tester | Waiting | Phase 5 — test-plan.md + Playwright e2e against user-stories.md, once Phase 6 launch is live |
 | Designer (separate chat) | Done | Tokens, components, and all 6 screens (desktop + mobile) delivered |
 
-## Feature: Journal (branch feature/journal, approved by Aayush 2026-10-18, committed, not merged)
+## Feature: Journal (approved by Aayush 2026-10-18, Neon migration 0002 applied by Aayush, merged feature/journal → main)
 - journal_entries table + migration 0002 + 8 seeded demo entries — db-architect
 - 7 /journal endpoints (list/search/tag/date filter, stats, get, create, update, delete, Markdown export for AI), Devanagari-safe tags, CORS expose_headers for export — backend-dev, 83 new tests
 - Journal list, empty state, full-screen autosave editor, Export for AI modal, 5-tab mobile nav — frontend-dev, 52 new tests

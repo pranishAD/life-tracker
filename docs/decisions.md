@@ -31,3 +31,4 @@ Format: date — decision — why — who approved.
 - 2026-10-18 — Journal API edge cases chosen by backend-dev written into api-contract.yaml as-is: export `from` default clamps to `to`, one-day export title, Overall-line wording (Calibrating / no change / no prior score), "No goals yet." line, weekly-scores window, word count = body words only, export is read-only, malformed entry id → 404, PATCH validates body before the ownership 404 — Aayush
 - 2026-10-18 — Added .gitattributes (`* text=auto eol=lf`, CRLF for .bat/.cmd/.ps1, images/fonts binary) so line endings never show up as diff noise — Aayush
 - 2026-10-18 — Added security-reviewer subagent (owns docs/security-review.md, reports only, never edits code) to the team table in CLAUDE.md — Aayush
+- 2026-10-18 — Journal feature merged feature/journal → main and pushed, after Aayush applied migration 0002_journal_entries to Neon. Security review of the journal was not run before merge (Aayush's call) — Aayush
