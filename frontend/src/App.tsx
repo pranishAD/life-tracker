@@ -5,6 +5,8 @@ import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import GoalDetailPage from "./pages/GoalDetailPage";
 import GoalsPage from "./pages/GoalsPage";
+import JournalEditorPage from "./pages/JournalEditorPage";
+import JournalPage from "./pages/JournalPage";
 import SettingsPage from "./pages/SettingsPage";
 import WeeklyReviewPage from "./pages/WeeklyReviewPage";
 
@@ -27,9 +29,23 @@ function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/goals" element={<GoalsPage />} />
         <Route path="/goals/:goalId" element={<GoalDetailPage />} />
+        <Route path="/journal" element={<JournalPage />} />
         <Route path="/review" element={<WeeklyReviewPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
+
+      {/* The journal editor is full-screen: protected, but outside the
+          shell (no sidebar, tab bar or FAB). "/journal/new" also lands
+          here (entryId = "new"), so creating an entry can swap the URL to
+          /journal/<id> without remounting the editor. */}
+      <Route
+        path="/journal/:entryId"
+        element={
+          <ProtectedRoute>
+            <JournalEditorPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

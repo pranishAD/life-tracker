@@ -1,7 +1,7 @@
 from datetime import date
 
-from backend.scoring.formulas import consistency, pace
-from backend.scoring.types import GoalType
+from scoring.formulas import consistency, pace
+from scoring.types import GoalType
 
 from .factories import make_check_in, make_goal, make_milestone
 

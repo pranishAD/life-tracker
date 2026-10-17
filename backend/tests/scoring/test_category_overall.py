@@ -1,8 +1,8 @@
 from datetime import date
 
-from backend.scoring.engine import category_score, overall_score, score_goal
-from backend.scoring.formulas import is_scorable_status
-from backend.scoring.types import CategoryScoreInput, GoalStatus, WeightedScore
+from scoring.engine import category_score, overall_score, score_goal
+from scoring.formulas import is_scorable_status
+from scoring.types import CategoryScoreInput, GoalStatus, WeightedScore
 
 from .factories import make_goal
 

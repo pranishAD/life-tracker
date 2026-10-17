@@ -1,7 +1,7 @@
 from datetime import date
 
-from backend.scoring.engine import goal_score, score_goal
-from backend.scoring.types import GoalStatus, GoalType
+from scoring.engine import goal_score, score_goal
+from scoring.types import GoalStatus, GoalType
 
 from .factories import make_check_in, make_goal, make_milestone
 

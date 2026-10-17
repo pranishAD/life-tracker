@@ -14,8 +14,8 @@ grandparent):
     cd backend && python -m db.seed
 
 Safe to re-run: it deletes the two seed users (by email) first; ON DELETE
-CASCADE takes their goals/milestones/check-ins/snapshots/category_weights
-with them, then everything is recreated fresh.
+CASCADE takes their goals/milestones/check-ins/snapshots/category_weights/
+journal_entries with them, then everything is recreated fresh.
 """
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ from app.models import (  # noqa: E402
     Goal,
     GoalStatus,
     GoalType,
+    JournalEntry,
     Milestone,
     ScoreSnapshot,
     User,
@@ -390,7 +391,106 @@ def seed_demo_user(session: Session, rng: random.Random) -> User:
     ):
         session.add_all(build_snapshots(goal, check_ins, milestones))
 
+    session.add_all(build_journal_entries(user))
+
     return user
+
+
+def journal_created_at(days_ago: int, hour: int, minute: int = 0) -> datetime:
+    """Explicit, backdated `created_at` for a seeded journal entry (UTC)."""
+    return datetime.combine(
+        TODAY - timedelta(days=days_ago), datetime.min.time(), tzinfo=timezone.utc
+    ) + timedelta(hours=hour, minutes=minute)
+
+
+def build_journal_entries(user: User) -> list[JournalEntry]:
+    """Hand-written (not RNG-driven, so adding these doesn't shift the
+    random check-in data above) journal entries over the last ~3 weeks:
+    mix of titled/untitled, with/without mood, with/without tags. Journal
+    entries do not feed scoring.
+    """
+    rows = [
+        # (days_ago, hour, minute, title, body, mood, tags)
+        (
+            20, 21, 15,
+            "Fresh start",
+            "Set up my goals in Life Tracker tonight. Bench, reading, portfolio "
+            "and meditation. Feels like a lot, but each one is small on its own.",
+            4,
+            ["idea"],
+        ),
+        (
+            17, 7, 40,
+            None,
+            "Skipped the gym again. Slept badly and couldn't get going. Not "
+            "beating myself up, back at it tomorrow.",
+            2,
+            ["gym"],
+        ),
+        (
+            14, 19, 5,
+            "Bench felt heavy",
+            "Got 62.5kg for 3x5 but the last set was ugly. Need to sort out my "
+            "grip and stop flaring elbows. Maybe add a deload next week.",
+            3,
+            ["gym"],
+        ),
+        (
+            11, 22, 30,
+            None,
+            "Read two chapters of the database book. Normalisation finally "
+            "clicked when I drew the dependencies out on paper.",
+            None,
+            ["study"],
+        ),
+        (
+            8, 13, 0,
+            "App idea: habit buddy",
+            "What if two people could share a habit goal and see each other's "
+            "streaks? Probably out of scope for now, writing it down so I stop "
+            "thinking about it.",
+            None,
+            ["idea", "study"],
+        ),
+        (
+            5, 20, 45,
+            "Homepage shipped",
+            "Pushed the portfolio homepage live. Responsive bugs on mobile took "
+            "way longer than expected but it looks clean now.",
+            5,
+            [],
+        ),
+        (
+            3, 8, 10,
+            None,
+            "Ten minutes of meditation before class. Calmer than usual walking in.",
+            4,
+            [],
+        ),
+        (
+            1, 18, 20,
+            "Weekly reflection",
+            "Good week overall. Gym 3x, reading most days, missed meditation "
+            "twice. Projects page is the next big thing for the portfolio.",
+            4,
+            ["gym", "study"],
+        ),
+    ]
+    entries: list[JournalEntry] = []
+    for days_ago, hour, minute, title, body, mood, tags in rows:
+        ts = journal_created_at(days_ago, hour, minute)
+        entries.append(
+            JournalEntry(
+                user_id=user.id,
+                title=title,
+                body=body,
+                mood=mood,
+                tags=tags,
+                created_at=ts,
+                updated_at=ts,
+            )
+        )
+    return entries
 
 
 def seed_second_user(session: Session, rng: random.Random) -> User:
@@ -548,7 +648,7 @@ def wipe_seed_users(session: Session) -> None:
 
 
 def print_row_counts(session: Session) -> None:
-    for model in (User, Goal, Milestone, CheckIn, ScoreSnapshot, CategoryWeight):
+    for model in (User, Goal, Milestone, CheckIn, ScoreSnapshot, CategoryWeight, JournalEntry):
         count = session.scalar(select(func.count()).select_from(model))
         print(f"{model.__tablename__:<18} {count}")
 

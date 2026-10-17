@@ -1,6 +1,6 @@
 import pytest
 
-from backend.scoring.formulas import grade
+from scoring.formulas import grade
 
 BOUNDARY_CASES = [
     (0, "D", "Off Track"),

@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from backend.scoring.types import CheckIn, Goal, GoalStatus, GoalType, Milestone
+from scoring.types import CheckIn, Goal, GoalStatus, GoalType, Milestone
 
 
 def make_goal(

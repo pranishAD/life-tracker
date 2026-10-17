@@ -2,7 +2,7 @@
 
 Import surface for the rest of the backend, e.g.:
 
-    from app.models import Base, User, Goal, Milestone, CheckIn, ScoreSnapshot, CategoryWeight
+    from app.models import Base, User, Goal, Milestone, CheckIn, ScoreSnapshot, CategoryWeight, JournalEntry
     from app.models import Category, GoalType, GoalStatus
 
 `Base.metadata` is what `backend/db/migrations/env.py` uses as
@@ -14,6 +14,7 @@ from .category_weight import CategoryWeight
 from .check_in import CheckIn
 from .enums import Category, GoalStatus, GoalType
 from .goal import Goal
+from .journal_entry import JournalEntry
 from .milestone import Milestone
 from .score_snapshot import ScoreSnapshot
 from .user import User
@@ -31,4 +32,5 @@ __all__ = [
     "CheckIn",
     "ScoreSnapshot",
     "CategoryWeight",
+    "JournalEntry",
 ]
