@@ -48,7 +48,7 @@ function emitUnauthorized() {
 interface ApiFetchOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
-  query?: Record<string, string | number | undefined>;
+  query?: Record<string, string | number | boolean | undefined>;
   /** Skip attaching the bearer token (only /auth/login and /auth/register). */
   skipAuth?: boolean;
 }
@@ -74,39 +74,65 @@ function buildUrl(path: string, query?: ApiFetchOptions["query"]): string {
   return url;
 }
 
-export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
-  const { method = "GET", body, query, skipAuth } = options;
-
+function buildHeaders(hasJsonBody: boolean, skipAuth?: boolean): Record<string, string> {
   const headers: Record<string, string> = {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (hasJsonBody) headers["Content-Type"] = "application/json";
   if (!skipAuth) {
     const token = getToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
+  return headers;
+}
+
+/** Turn a non-2xx response into an ApiError (and fire the 401 event). */
+async function throwApiError(res: Response, skipAuth?: boolean): Promise<never> {
+  let errBody: ApiErrorBody | null = null;
+  try {
+    errBody = (await res.json()) as ApiErrorBody;
+  } catch {
+    errBody = null;
+  }
+  const code = errBody?.error?.code ?? "UNKNOWN_ERROR";
+  const message = errBody?.error?.message ?? `Request failed (${res.status})`;
+  if (res.status === 401 && !skipAuth) emitUnauthorized();
+  throw new ApiError(res.status, code, message);
+}
+
+export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const { method = "GET", body, query, skipAuth } = options;
 
   const res = await fetch(buildUrl(path, query), {
     method,
-    headers,
+    headers: buildHeaders(body !== undefined, skipAuth),
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+
+  if (!res.ok) return throwApiError(res, skipAuth);
 
   // 204 No Content (deletes) — nothing to parse.
   if (res.status === 204) return undefined as T;
 
-  let data: unknown;
   try {
-    data = await res.json();
+    return (await res.json()) as T;
   } catch {
-    data = null;
+    return null as T;
   }
+}
 
-  if (!res.ok) {
-    const errBody = data as ApiErrorBody | null;
-    const code = errBody?.error?.code ?? "UNKNOWN_ERROR";
-    const message = errBody?.error?.message ?? `Request failed (${res.status})`;
-    if (res.status === 401 && !skipAuth) emitUnauthorized();
-    throw new ApiError(res.status, code, message);
-  }
-
-  return data as T;
+/**
+ * Like `apiFetch`, but for endpoints that return a file instead of JSON
+ * (the journal Markdown export). Same base URL, same Bearer token, same 401
+ * handling — it just hands back the body as text plus the response headers,
+ * so callers can read things like `X-Journal-Entry-Count`.
+ */
+export async function apiFetchText(
+  path: string,
+  options: Pick<ApiFetchOptions, "query"> = {},
+): Promise<{ text: string; headers: Headers }> {
+  const res = await fetch(buildUrl(path, options.query), {
+    method: "GET",
+    headers: buildHeaders(false),
+  });
+  if (!res.ok) return throwApiError(res);
+  return { text: await res.text(), headers: res.headers };
 }

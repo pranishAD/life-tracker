@@ -1,14 +1,24 @@
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { CalendarCheck, LayoutDashboard, Plus, Settings as SettingsIcon, Target } from "lucide-react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import {
+  CalendarCheck,
+  LayoutDashboard,
+  NotebookPen,
+  PenLine,
+  Plus,
+  Settings as SettingsIcon,
+  Target,
+} from "lucide-react";
 import clsx from "../lib/clsx";
 import { useAuth } from "../context/AuthContext";
 import { CheckInModalProvider, useCheckInModal } from "../context/CheckInModalContext";
 import { useGoals } from "../hooks/useGoals";
+import { useJournalStats } from "../hooks/useJournal";
 import CheckInModal from "./CheckInModal";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/goals", label: "Goals", icon: Target },
+  { to: "/journal", label: "Journal", icon: NotebookPen },
   { to: "/review", label: "Weekly review", icon: CalendarCheck },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -16,6 +26,7 @@ const NAV_ITEMS = [
 const TAB_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/goals", label: "Goals", icon: Target },
+  { to: "/journal", label: "Journal", icon: NotebookPen },
   { to: "/review", label: "Review", icon: CalendarCheck },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ];
@@ -56,10 +67,20 @@ function AppShellInner({
   const { data: goals } = useGoals({ status: "active" });
   const { openCheckIn } = useCheckInModal();
 
+  const navigate = useNavigate();
+
+  // On Journal pages the FAB is "New entry" instead of "Log check-in", and
+  // it's hidden on the empty journal (that screen has its own big button).
+  // useJournalStats shares its cache with the Journal page, so this is not
+  // an extra request.
+  const onJournal = location.pathname.startsWith("/journal");
+  const { data: journalStats } = useJournalStats({ enabled: onJournal });
+  const showJournalFab = onJournal && (journalStats?.total_entries ?? 0) > 0;
+
   // The FAB/header button logs a check-in; with no active goals there's
   // nothing to check in on, so we hide it (matches the empty-state screens).
   const hasGoals = (goals?.length ?? 0) > 0;
-  const showFab = hasGoals && location.pathname !== "/settings";
+  const showFab = !onJournal && hasGoals && location.pathname !== "/settings";
 
   return (
     <div className="min-h-screen md:grid md:grid-cols-[240px_minmax(0,1fr)] bg-bg text-ink">
@@ -122,7 +143,7 @@ function AppShellInner({
         <Outlet />
       </main>
 
-      <nav className="md:hidden fixed left-0 right-0 bottom-0 h-tabbar grid grid-cols-4 bg-surface-1/95 backdrop-blur border-t border-border px-2 pt-2 pb-3.5 z-10">
+      <nav className="md:hidden fixed left-0 right-0 bottom-0 h-tabbar grid grid-cols-5 bg-surface-1/95 backdrop-blur border-t border-border px-2 pt-2 pb-3.5 z-10">
         {TAB_ITEMS.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} className="flex flex-col items-center justify-center gap-1 text-[11px] text-ink-subtle">
             {({ isActive }) => (
@@ -142,6 +163,16 @@ function AppShellInner({
           onClick={() => openCheckIn()}
         >
           <Plus className="w-6 h-6" strokeWidth={2} />
+        </button>
+      )}
+
+      {showJournalFab && (
+        <button
+          className="md:hidden fixed right-4 bottom-[88px] w-fab h-fab rounded-full bg-gold text-ink-on-gold grid place-items-center shadow-lg z-10"
+          aria-label="New entry"
+          onClick={() => navigate("/journal/new")}
+        >
+          <PenLine className="w-6 h-6" strokeWidth={2} />
         </button>
       )}
 

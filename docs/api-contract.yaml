@@ -23,6 +23,11 @@ tags:
   - name: dashboard
   - name: reviews
   - name: settings
+  - name: journal
+    description: >
+      Free-form notes. Journal entries NEVER affect any score, grade, streak or
+      snapshot. Every route is scoped to the current user: another user's entry
+      (or a missing one) is always 404, never 403.
   - name: health
   - name: internal
 
@@ -525,6 +530,292 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /journal:
+    get:
+      tags: [journal]
+      summary: List my journal entries, newest first, with search, tag + date filter and pagination
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: >
+            Case-insensitive substring search across title, body and tags.
+            Leading/trailing whitespace is trimmed; empty = no search.
+          schema:
+            type: string
+            maxLength: 200
+        - name: tag
+          in: query
+          required: false
+          description: Exact tag match (normalised the same way as on save, so "#Gym" matches "gym").
+          schema:
+            type: string
+            maxLength: 32
+        - name: from
+          in: query
+          required: false
+          description: Inclusive start date, compared against created_at in the caller's tz_offset.
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          description: Inclusive end date, compared against created_at in the caller's tz_offset. Must be >= from (422 otherwise).
+          schema:
+            type: string
+            format: date
+        - $ref: "#/components/parameters/TzOffset"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: One page of entries (ordered created_at DESC, then id DESC for a stable order)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalEntryPage"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [journal]
+      summary: Create a journal entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalEntryCreateRequest"
+      responses:
+        "201":
+          description: Entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalEntry"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /journal/stats:
+    get:
+      tags: [journal]
+      summary: Month stats + all-time tag counts for the Journal page header, rail and tag filter row
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: YYYY-MM. Defaults to the current month in the caller's tz_offset.
+          schema:
+            type: string
+            pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
+            example: "2026-10"
+        - $ref: "#/components/parameters/TzOffset"
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalStats"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /journal/export:
+    get:
+      tags: [journal]
+      summary: Download my journal (and optionally goals + scores) as one Markdown file for pasting into an AI
+      description: >
+        Returns `text/markdown; charset=utf-8` with
+        `Content-Disposition: attachment; filename="bihan-journal-YYYY-MM-DD-to-YYYY-MM-DD.md"`
+        (the resolved from/to dates). Also returns `X-Journal-Entry-Count`,
+        `X-Journal-Word-Count` and `X-Journal-Goal-Count` headers so the
+        Export modal can show its summary line from the same request; the
+        backend lists these (and Content-Disposition) in CORS
+        `expose_headers` so they're readable cross-origin in local dev.
+        Nothing is sent anywhere — this only builds the file.
+
+        File format (keep it stable):
+
+        ```
+        # Bihan journal: Sep 18 – Oct 17, 2026
+        Exported: Oct 17, 2026 · 24 entries
+
+        ## Goals and scores            (only when include_goals=true)
+        - Overall: 78 (A, Strong), ▲6 vs last week
+        - Bench press 80 kg: 84 (A, Strong) · 72 / 80 kg
+        - Finish ITAP3010: 51 (C, Slipping) · 3 / 8 subtasks
+        - Morning run: Calibrating · 2 / 5 this week
+        ### Weekly overall scores
+        - Week of Sep 21: 70 (B)
+        - Week of Sep 28: 72 (B)
+
+        ## Entries
+        ### Sat, Oct 17 · Leg day finally
+        Mood: 4/5 (Good) · Tags: #gym #legs
+        Squats felt heavy after a week off, but I hit…
+
+        ### Fri, Oct 16
+        Mood: 3/5 (Okay)
+        Random thought: …
+        ```
+
+        Rules: entries oldest → newest; untitled entries show the date only;
+        the Mood/Tags line drops whichever part is empty and is omitted
+        entirely when both are; body line breaks are kept, and body lines
+        that start with `#` are escaped as `\#` so they can't break the
+        heading structure; dates are in the caller's tz_offset, and the
+        year is added to entry headings only when the range spans more than
+        one calendar year. Goals section lists every non-archived goal that
+        started on or before `to` (current score, grade + label, progress),
+        then the weekly overall scores for weeks inside the range that have
+        snapshot data (sub-section omitted if none). With zero entries the
+        file still downloads and the Entries section says "No entries in
+        this range." Mood labels: 1 Rough, 2 Low, 3 Okay, 4 Good, 5 Great.
+
+        Edge cases (as built, approved 2026-10-18):
+        - One-day range: title is a single date, e.g. "# Bihan journal: Oct 17, 2026".
+        - Overall line: "- Overall: Calibrating" when there is no overall
+          score; ", no change vs last week" when the change is 0; the change
+          part is left off when there is no score from 7 days earlier.
+        - No goals to list: the Goals section says "- No goals yet."
+        - Weekly overall scores: Monday-start weeks whose Monday falls inside
+          [from, to] and that have at least one snapshot; the score is the
+          overall as of the week's end (or today), same as /reviews/weekly.
+        - Scores and habit "this week" progress use today in the caller's tz_offset.
+        - X-Journal-Word-Count counts whitespace-separated words in entry
+          bodies only (not titles), same rule as the frontend.
+        - The export is read-only: it never writes score snapshots.
+      parameters:
+        - name: from
+          in: query
+          required: false
+          description: >
+            Inclusive. Defaults to the date of the user's first entry (or `to`
+            if they have none). If `to` is earlier than the first entry, the
+            default is clamped to `to` (no 422).
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          description: Inclusive. Defaults to today in the caller's tz_offset. Must be >= from (422 otherwise).
+          schema:
+            type: string
+            format: date
+        - name: include_goals
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - $ref: "#/components/parameters/TzOffset"
+      responses:
+        "200":
+          description: The Markdown file
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: 'attachment; filename="bihan-journal-2026-09-18-to-2026-10-17.md"'
+            X-Journal-Entry-Count:
+              schema:
+                type: integer
+            X-Journal-Word-Count:
+              schema:
+                type: integer
+            X-Journal-Goal-Count:
+              description: Goals listed in the file (0 when include_goals=false)
+              schema:
+                type: integer
+          content:
+            text/markdown:
+              schema:
+                type: string
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /journal/{entryId}:
+    parameters:
+      - name: entryId
+        in: path
+        required: true
+        description: >
+          A malformed id returns 404 (not 422), same as a missing entry or
+          another user's entry. On PATCH, body validation runs first, so an
+          invalid body returns 422 even for someone else's entry (nothing is
+          changed or leaked).
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [journal]
+      summary: Get one of my entries
+      responses:
+        "200":
+          description: The entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalEntry"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    patch:
+      tags: [journal]
+      summary: Edit an entry (used by editor autosave). Only sent fields change; `tags` replaces the whole list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalEntryUpdateRequest"
+      responses:
+        "200":
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalEntry"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [journal]
+      summary: Permanently delete an entry (hard delete)
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /internal/daily-snapshot:
     get:
       tags: [internal]
@@ -567,6 +858,21 @@ components:
       description: >
         Compared against the server's CRON_SECRET env var, not a user JWT.
         Used only by /internal/daily-snapshot.
+
+  parameters:
+    TzOffset:
+      name: tz_offset
+      in: query
+      required: false
+      description: >
+        Caller's UTC offset in minutes, east positive (Nepal = 345). Frontend
+        sends `-new Date().getTimezoneOffset()`. Used to turn dates into day
+        boundaries and to print local dates/times. Defaults to 0 (UTC).
+      schema:
+        type: integer
+        minimum: -720
+        maximum: 840
+        default: 0
 
   responses:
     Unauthorized:
@@ -1082,3 +1388,161 @@ components:
                 description: Must be greater than 0 (matches the DB's CHECK (weight > 0))
             required: [category, weight]
       required: [weights]
+
+    JournalTag:
+      type: string
+      description: >
+        Normalised on save: trimmed, leading "#" removed, lowercased, runs of
+        whitespace become "-". After that it must be 1-32 chars of letters,
+        digits, "_" or "-" (Unicode letters allowed, plus combining marks so
+        scripts like Devanagari work, e.g. "नेपाल"; regex
+        `^[\p{L}\p{M}\p{N}_-]+$`), else 422. Duplicates (after normalising)
+        are dropped, keeping first-seen order.
+      minLength: 1
+      maxLength: 32
+      example: side-project
+
+    JournalEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+          nullable: true
+          maxLength: 120
+        body:
+          type: string
+        mood:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+          description: "1 Rough, 2 Low, 3 Okay, 4 Good, 5 Great"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/JournalTag"
+          maxItems: 10
+          description: Always an array (empty when none)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required: [id, title, body, mood, tags, created_at, updated_at]
+
+    JournalEntryCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+          maxLength: 120
+          description: Trimmed; empty/whitespace-only is stored as null
+        body:
+          type: string
+          minLength: 1
+          maxLength: 50000
+          description: Must contain non-whitespace text (422 otherwise). Stored as sent (not trimmed inside), line breaks kept.
+        mood:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/JournalTag"
+          maxItems: 10
+          default: []
+      required: [body]
+
+    JournalEntryUpdateRequest:
+      type: object
+      description: >
+        Partial update. `title: null` / `mood: null` clear them; `tags`
+        replaces the list (`[]` clears). `body` may not be null or blank.
+        `created_at` is not editable.
+      properties:
+        title:
+          type: string
+          nullable: true
+          maxLength: 120
+        body:
+          type: string
+          minLength: 1
+          maxLength: 50000
+        mood:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 5
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/JournalTag"
+          maxItems: 10
+      minProperties: 1
+
+    JournalEntryPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/JournalEntry"
+        total:
+          type: integer
+          description: Total entries matching the filters (all pages)
+        limit:
+          type: integer
+        offset:
+          type: integer
+      required: [items, total, limit, offset]
+
+    JournalStats:
+      type: object
+      properties:
+        month:
+          type: string
+          example: "2026-10"
+        entry_count:
+          type: integer
+          description: Entries created in this month
+        avg_mood:
+          type: number
+          nullable: true
+          description: Mean mood of this month's entries that have one, 1 decimal; null if none
+        days:
+          type: array
+          description: One item per calendar day of the month, in order (for the mood strip)
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              entry_count:
+                type: integer
+              avg_mood:
+                type: number
+                nullable: true
+            required: [date, entry_count, avg_mood]
+        total_entries:
+          type: integer
+          description: All-time entry count (0 = show the empty state)
+        tags:
+          type: array
+          description: All-time tag usage, most-used first, ties alphabetical
+          items:
+            type: object
+            properties:
+              tag:
+                $ref: "#/components/schemas/JournalTag"
+              count:
+                type: integer
+            required: [tag, count]
+      required: [month, entry_count, avg_mood, days, total_entries, tags]

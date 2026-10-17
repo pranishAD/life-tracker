@@ -106,11 +106,35 @@ One goal in the Goals list and the dashboard "needs attention" list. The whole c
 - Stat: habits = "12-day streak", behind pace = "Behind pace", milestones = subtasks done.
 - Padding `p-5`, width fills its grid cell (3 columns desktop, 1 column mobile).
 
+## Toggle
+
+- Track `w-11 h-[26px] rounded-full`. Off: `bg-surface-3 border border-border-strong`, knob 20px `bg-ink-muted`. On: `bg-gold border-gold`, knob `bg-ink-on-gold translate-x-[18px]`. 150ms transition.
+- Always next to a text label; the whole row is the click target. `role="switch"` + `aria-checked`.
+
+## MoodMeter and MoodPicker (Journal)
+
+Mood is 1-5: **1 Rough, 2 Low, 3 Okay, 4 Good, 5 Great**. It's optional.
+
+- **MoodMeter** (read-only, on entry cards): five 3px-wide bars rising 5, 7, 9, 11, 14px, `gap-0.5`, filled `bg-gold` up to the mood, rest `bg-surface-3`, then the word in `text-body-sm text-ink-muted`. `aria-label="Mood 4 of 5, Good"`. No mood → render nothing.
+- **MoodPicker** (editor): five equal tiles in `grid-cols-5 gap-2`, each `bg-surface-2 rounded-md py-2` with the number (17px Unbounded 700) over the word (11px). Selected: `bg-grade-s-dim border border-gold text-gold`, `aria-pressed="true"`. Tapping the selected tile clears it. Same shape as the check-in Effort picker, on purpose.
+- **Never colour mood with grade colours.** Grades mean scores; mood is just how the day felt.
+
+## TagChip (Journal)
+
+- `inline-flex rounded-full bg-surface-2 px-2.5 py-0.5 text-body-sm font-medium text-ink-muted`, with a `#` prefix in `text-ink-subtle`. Tags are stored lowercase, no spaces (`#study`, `#side-project`).
+- Selected filter: `bg-ink text-bg`. Removable (in the editor's tag input): `bg-surface-3 text-ink` + a 16px x button `aria-label="Remove gym"`.
+- Not the same as `bh-chip` (uppercase category/type labels on goals). Don't mix them.
+
+## SearchField
+
+- `h-11 flex items-center gap-2 bg-surface-1 border border-border-strong rounded-md px-3`, search icon `text-ink-muted`, input `text-body`, placeholder `text-ink-subtle`. Desktop shows a `/` key hint on the right (`/` focuses search).
+- Focus: `border-gold shadow-focus`. Filters as you type (debounce ~250ms). In results, highlight matches with `bg-grade-s-dim text-gold rounded-sm`.
+
 ---
 
 ## Screens
 
-PNGs are in `design/screens/` (`<screen>-desktop.png` at 1440px, `<screen>-mobile.png` at 390px, 2x). The responsive HTML source for every screen is in `design/screens-html/`: open one in a browser and resize it to see both layouts. The class names match `components/bundle.css` from the design system.
+PNGs are in `design/screens/` (`<screen>-desktop.png` at 1440px, `<screen>-mobile.png` at 390px, 2x; the Journal screens `07`-`09` are at 375px). The responsive HTML source for every screen is in `design/screens-html/`: open one in a browser and resize it to see both layouts. The class names match `components/bundle.css` from the design system.
 
 Breakpoint: **mobile < 768px**, desktop ≥ 768px (Tailwind `md:`). Build mobile-first.
 
@@ -118,10 +142,10 @@ Breakpoint: **mobile < 768px**, desktop ≥ 768px (Tailwind `md:`). Build mobile
 
 | | Desktop | Mobile |
 |---|---|---|
-| Navigation | Left sidebar `w-sidebar` (240px), full height, 1px `border-r border-border`. Logo at top, nav links (Dashboard, Goals, Weekly review, Settings), user chip pinned to the bottom. Active link: `bg-surface-1 text-ink`, icon `text-gold`. | Sidebar hidden. Bottom tab bar `h-tabbar` (72px), fixed, `bg-surface-1/95 backdrop-blur border-t border-border`, 4 tabs (icon + 11px label; active icon gold). Top row: logo left, avatar right. |
+| Navigation | Left sidebar `w-sidebar` (240px), full height, 1px `border-r border-border`. Logo at top, nav links (Dashboard, Goals, Journal, Weekly review, Settings), user chip pinned to the bottom. Active link: `bg-surface-1 text-ink`, icon `text-gold`. | Sidebar hidden. Bottom tab bar `h-tabbar` (72px), fixed, `bg-surface-1/95 backdrop-blur border-t border-border`, 5 tabs: Dashboard, Goals, Journal, Review, Settings (icon + 11px label; active icon gold). Top row: logo left, avatar right. |
 | Main column | `max-w-main` (1296px), `px-12 pt-8 pb-12` | `px-4 pt-5`, `pb-[88px]` so content clears the tab bar |
 | Page header | Eyebrow (`text-body-sm text-ink-muted`) + `text-display` title left; primary action buttons right | Same, title `text-display-mobile`; header buttons hidden (actions move to the FAB or into the page) |
-| Log check-in | Gold primary button in the header | Gold FAB, 56px circle, fixed `right-4 bottom-[88px]`, plus icon. Hidden on empty states and inside the modal. |
+| Log check-in | Gold primary button in the header | Gold FAB, 56px circle, fixed `right-4 bottom-[88px]`, plus icon. Hidden on empty states and inside the modal. On Journal pages the FAB is "New entry" (pen icon) instead. |
 | Gaps | Cards `gap-5` (20px), sections `mt-8` (32px) | Cards `gap-4`, sections `mt-6`; card padding `p-4` |
 
 ### 1. Login / Register (`01-login`, `01b-register`)
@@ -210,3 +234,88 @@ Breakpoint: **mobile < 768px**, desktop ≥ 768px (Tailwind `md:`). Build mobile
 - **Loading:** skeleton blocks in `bg-surface-2` at the size of each card, rings as empty tracks. No spinners on the dashboard hero.
 - **Error:** inside the card that failed: `text-grade-d` message + "Try again" secondary button. The rest of the page stays usable.
 - **Empty:** as designed for Dashboard and Goals; Goal detail check-ins empty = "No check-ins yet. Log your first one." + primary button.
+
+---
+
+## Journal
+
+Notes and random thoughts, kept next to your goals. Screens `07`-`09` in `design/screens/`, mobile at **375px**.
+
+### 7. Journal list (`07-journal`)
+
+- Header: eyebrow "23 entries this month", title "Journal", buttons "Export for AI" (secondary, `file-down` icon) + "New entry" (primary, `pen-line` icon).
+- **Desktop layout:** `grid-cols-[minmax(0,1fr)_320px] gap-8`: entries column + right rail (`sticky top-8`).
+- **Tools (top of the entries column):** SearchField full width ("Search entries and tags"), then a row of TagChips to filter: "All" (selected = `bg-ink`, no `#`) followed by the user's tags with counts, most-used first. One tag at a time in v1.
+- **Entries:** grouped by time with `label` headings: "This week", "Last week", then month names ("September 2026"). Newest first. Cards stacked `gap-3`.
+- **Entry card** (`bh-card bh-card--interactive p-5`, `grid-cols-[56px_1fr] gap-4`): date tile (same as the check-in date tile: day in 18px Unbounded over "OCT") | title in `text-heading-md`, one line, ellipsis → excerpt `text-body text-ink-muted`, clamped to 2 lines → footer row: MoodMeter, TagChips, and the weekday + time right-aligned in `text-body-sm text-ink-subtle`.
+  - **No title:** use the entry's first sentence as the card title (`font-medium` instead of semibold) and the rest of the body as the excerpt.
+  - No mood / no tags: those parts are simply absent.
+- **Right rail:** "October" card: 2 stat tiles (Entries, Avg mood) + a 30-day mood strip (one bar per day, height = mood × 20%, `bg-gold`; days with no entry = 3px `bg-border-strong`) + caption "Grey = no entry that day." Then a "Tags" card listing every tag with its count; clicking one applies that filter.
+- **Mobile (375):** single column. Top row logo + avatar, then title. Search field + a 44px secondary icon button (Export for AI) beside it. Tag row scrolls sideways, no wrap. Cards drop the date tile; the date goes above the title as a `label` ("SAT, OCT 17"), padding `p-4`. The October stats card moves below the list; the Tags card is hidden (the tag row covers it). FAB = New entry.
+- **No search results:** inside the list area: "No entries match "squat"" + a ghost "Clear search" button.
+- API (proposed): `GET /journal?q=&tag=&cursor=` (paged, 20 per page, infinite scroll), `GET /journal/stats?month=2026-10`.
+
+### 7b. Journal empty state (`07b-journal-empty`)
+
+- Header as normal, but "Export for AI" is disabled.
+- Centred card: 64px gold-tinted icon tile (`notebook-pen`, `bg-grade-s-dim text-gold`) → "Your journal is empty" (`text-heading-lg`) → "Notes, random thoughts, wins, rants. Write it down here and it sits right next to your goals and scores." → primary "Write your first entry" → `label` "Or start from a prompt" → 3 prompt cards (`grid-cols-3`, 1 column on mobile): "What's on your mind right now?", "What went well today?", "What got in the way of a goal?". A prompt opens the editor with the prompt as the body placeholder.
+- No FAB, no rail.
+
+### 8. Write / edit entry (`08-journal-edit`, `08b-journal-new`)
+
+Distraction-free: **no sidebar, no tab bar, no FAB.** Full-screen page on its own route (`/journal/new`, `/journal/:id`).
+
+- **Top bar** (sticky, `bg-bg/90 backdrop-blur`, `px-12 py-4`; mobile `px-4 py-3`): "‹ Journal" back link left. Right: save status, word count (desktop), delete (ghost icon button, existing entries only, desktop; on mobile it's in the ⋯ menu), and a small primary button: "Done" (existing) / "Save" (new).
+- **Save status:** autosave 1s after typing stops. States: "Not saved yet" (`text-ink-subtle`), "Saving…", "Saved · 4:58 PM" with a 6px `bg-grade-a` dot, "Couldn't save. Retrying…" in `text-grade-d`. Leaving with unsaved changes asks for confirmation.
+- **Writing column:** `max-w-[720px] mx-auto px-6 pt-8`, bottom padding 220px (300px mobile) so text never hides under the details panel.
+  1. Date button (`text-body-sm text-ink-muted`, calendar icon + chevron): "Sat, Oct 17 · 4:58 PM". Defaults to now; opens a date-time picker so you can back-date. No future dates.
+  2. **Title (optional):** borderless input, Unbounded 600 32/40px (24/30 mobile), placeholder "Title (optional)" in `text-border-strong`.
+  3. **Body:** borderless auto-growing textarea, Inter 18/30px (17/28 mobile), `text-ink`, paragraphs spaced 20px. Placeholder "What's on your mind?" (or the chosen prompt). Plain text in v1; keep line breaks.
+- **Details panel** (mood + tags): floating card fixed `bottom-6`, centred, `max-w-[720px]`, `bg-surface-1 border rounded-xl shadow-modal px-5 py-4`, `grid-cols-[300px_1fr] gap-6`. Mobile: docked to the bottom edge as a sheet (`rounded-t-xl`, full width, sections stacked), sitting above the keyboard.
+  - **Mood:** `label` "MOOD" + "optional" hint, then the MoodPicker.
+  - **Tags:** `label` "TAGS", then a tag input (`bg-surface-2 border-border-strong rounded-md min-h-[52px]`) holding removable TagChips and a borderless input "Add tag". Enter or comma adds; Backspace on empty removes the last; lowercased, spaces become `-`; max 10 tags. Below: "Suggested" + the user's 2-4 most-used tags not already added.
+  - Mobile shows the word count on the Tags label row.
+- **New entry state** (`08b`): empty title and body showing placeholders, no mood selected, no tags, "Not saved yet", button reads "Save". An entry is created on first keystroke (autosave), not on Save.
+- Keyboard: `Ctrl/Cmd+Enter` = Done, `Esc` = back.
+- API (proposed): `POST /journal`, `PATCH /journal/{id}`, `DELETE /journal/{id}` (soft delete, "Undo" toast for 5s).
+
+### 9. Export for AI modal (`09-journal-export`)
+
+Opened from "Export for AI" on the Journal list. Desktop: centred dialog, **560px** wide (same frame as check-in: `bg-surface-1 rounded-xl shadow-modal p-8`, scrim + blur). Mobile: bottom sheet, scrolls if taller than the screen.
+
+1. Header: `label` "EXPORT FOR AI" with a `sparkles` icon, heading "Download your journal", one line: "One Markdown file you can paste into Claude or ChatGPT to ask about your patterns." Close button top-right.
+2. **Date range:** preset pills (Last 7 days, **Last 30 days** default, This month, All time; selected = `bg-ink text-bg`), then two date fields "From" → "To" (`grid-cols-[1fr_auto_1fr]`, stacked on mobile). Editing a date deselects the preset.
+3. **Include goals and scores:** an option row (`bg-surface-2 rounded-md p-4`) with title, a 2-line explanation ("Adds each goal's score, grade and progress for the same dates, so the AI can link what you wrote to how you did.") and a Toggle on the right. **Default on.**
+4. **Preview:** monospaced 12px box (`bg-bg border rounded-md`), first ~10 lines of the real file, fading out at the bottom. Headings in `text-ink`, field names in `text-gold`. Under it: "**24 entries** · about 6,300 words · 7 goals" and the filename in mono `text-ink-subtle`. Updates live when the range or toggle changes.
+5. **Footer** (top border): left "Downloads to your device only. Nothing is sent to an AI." with a lock icon; right Cancel (ghost, desktop) + primary "Download .md" (`download` icon). Mobile: full-width button, note centred under it.
+- 0 entries in range: summary reads "No entries in this range", Download disabled.
+- Filename: `bihan-journal-YYYY-MM-DD-to-YYYY-MM-DD.md`.
+- API (proposed): `GET /journal/export?from=2026-09-18&to=2026-10-17&include_goals=true` → `text/markdown` with `Content-Disposition: attachment`.
+
+**File format** (keep it stable, AI tools read it better):
+
+```md
+# Bihan journal: Sep 18 – Oct 17, 2026
+Exported: Oct 17, 2026 · 24 entries
+
+## Goals and scores            <- only when the toggle is on
+- Overall: 78 (A, Strong), ▲6 vs last week
+- Bench press 80 kg: 84 (A) · 72 / 80 kg
+- Finish ITAP3010: 51 (C, Slipping) · 3 / 8 subtasks
+(one line per active goal in the range: score, grade, label, progress; then the weekly overall scores in the range)
+
+## Entries
+### Sat, Oct 17 · Leg day finally
+Mood: 4/5 (Good) · Tags: #gym #legs
+Squats felt heavy after a week off, but I hit…
+
+### Fri, Oct 16                  <- untitled: date only
+Mood: 3/5 (Okay) · Tags: #bihan #idea
+Random thought: …
+```
+
+Entries oldest → newest (reads like a story). Lines for mood or tags are left out when empty.
+
+### Data needed (proposal for the Tech Lead, not in the current schema or API contract)
+
+`journal_entries`: `id`, `user_id`, `title` (nullable, ≤120), `body` (text), `mood` (smallint 1-5, nullable), `entry_at` (timestamptz, user-editable), `created_at`, `updated_at`, `deleted_at`. Tags: `journal_tags (entry_id, tag)` with tag lowercase ≤32 chars, or a `text[]` column. Journal does **not** affect any score.

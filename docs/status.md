@@ -2,7 +2,7 @@
 
 Updated by the orchestrator after every phase or major task.
 
-Last updated: 2026-10-15
+Last updated: 2026-10-17
 
 ## Current phase: 6. Launch (deploy config approved and merged to main; Aayush doing the real Neon/Vercel setup himself next)
 
@@ -21,6 +21,14 @@ Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Depl
 | frontend-dev | Done | Phase 4: all 6 screens + Settings, wired to the live backend. Phase 6: fixed API client to support a relative base URL for same-origin production deploys. 47/47 tests passing, clean build |
 | qa-tester | Waiting | Phase 5 — test-plan.md + Playwright e2e against user-stories.md, once Phase 6 launch is live |
 | Designer (separate chat) | Done | Tokens, components, and all 6 screens (desktop + mobile) delivered |
+
+## Feature: Journal (approved by Aayush 2026-10-18, Neon migration 0002 applied by Aayush, merged feature/journal → main)
+- journal_entries table + migration 0002 + 8 seeded demo entries — db-architect
+- 7 /journal endpoints (list/search/tag/date filter, stats, get, create, update, delete, Markdown export for AI), Devanagari-safe tags, CORS expose_headers for export — backend-dev, 83 new tests
+- Journal list, empty state, full-screen autosave editor, Export for AI modal, 5-tab mobile nav — frontend-dev, 52 new tests
+- Scoring tests now import `scoring...` so `pytest tests` runs all 262 inside the container — scoring-engine
+- Verified by orchestrator: backend 262/262, frontend 99/99 + clean build, live API smoke test (create/patch/delete/404/401, stats, export headers)
+- Open: browser check by Aayush; journal design PNGs (07–09) not yet in design/; qa-tester e2e for journal not written
 
 ## Phase 0 deliverables (all done)
 - docs/prd.md, docs/user-stories.md — product-planner

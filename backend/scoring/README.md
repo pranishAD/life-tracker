@@ -10,7 +10,9 @@ call from anywhere (API request handler, a daily cron job, a script).
 
 ```bash
 python -m pip install pytest
-pytest backend/tests/scoring -q
+pytest backend/tests/scoring -q          # from the repo root
+# or, inside the backend container (/app == backend/):
+docker compose exec -T backend pytest tests/scoring -q
 ```
 
 (No other dependency is required — the module only uses the standard
@@ -18,8 +20,9 @@ library.)
 
 ## Public API
 
-All of the below are importable from `backend.scoring` directly, e.g.
-`from backend.scoring import score_goal, Goal, CheckIn`.
+All of the below are importable from `scoring` directly (with `backend/` as
+the import root, same as `app` and `db`), e.g.
+`from scoring import score_goal, Goal, CheckIn`.
 
 ### Types (`backend/scoring/types.py`)
 

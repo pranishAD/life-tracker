@@ -172,3 +172,92 @@ export interface MilestoneUpdateRequest {
   due_date?: string | null;
   is_done?: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Journal (docs/api-contract.yaml, tag "journal"). Journal never affects any
+// score, grade or streak.
+// ---------------------------------------------------------------------------
+
+/** Mood 1-5: 1 Rough, 2 Low, 3 Okay, 4 Good, 5 Great. */
+export type Mood = 1 | 2 | 3 | 4 | 5;
+
+/** A normalised tag: lowercase, no spaces, no "#", 1-32 chars (contract `JournalTag`). */
+export type JournalTag = string;
+
+export interface JournalEntry {
+  id: string;
+  title: string | null;
+  body: string;
+  mood: Mood | null;
+  tags: JournalTag[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JournalEntryCreateRequest {
+  title?: string | null;
+  body: string;
+  mood?: Mood | null;
+  tags?: JournalTag[];
+}
+
+/** Partial update: only sent fields change. `tags` replaces the whole list. */
+export interface JournalEntryUpdateRequest {
+  title?: string | null;
+  body?: string;
+  mood?: Mood | null;
+  tags?: JournalTag[];
+}
+
+export interface JournalEntryPage {
+  items: JournalEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface JournalStatsDay {
+  date: string;
+  entry_count: number;
+  avg_mood: number | null;
+}
+
+export interface JournalTagCount {
+  tag: JournalTag;
+  count: number;
+}
+
+export interface JournalStats {
+  month: string;
+  entry_count: number;
+  avg_mood: number | null;
+  days: JournalStatsDay[];
+  total_entries: number;
+  tags: JournalTagCount[];
+}
+
+export interface JournalListParams {
+  q?: string;
+  tag?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface JournalExportParams {
+  /** Omit for "All time" (backend defaults to the first entry's date). */
+  from?: string;
+  to?: string;
+  include_goals?: boolean;
+}
+
+/** The Markdown file plus the summary numbers the backend sends as headers. */
+export interface JournalExport {
+  markdown: string;
+  entryCount: number;
+  wordCount: number;
+  goalCount: number;
+  /** From Content-Disposition, when the header is readable. */
+  filename: string | null;
+}

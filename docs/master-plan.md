@@ -89,8 +89,9 @@ Rules:
 - check_ins: id, goal_id (fk), value (nullable), note (nullable), effort_rating (1-5), logged_for (date), created_at
 - score_snapshots: id, goal_id (fk), snapshot_date, pace, consistency, momentum, effort, total. Unique (goal_id, snapshot_date)
 - category_weights: user_id (fk), category, weight. PK (user_id, category)
+- journal_entries: id (uuid), user_id (fk, on delete cascade), title (varchar 120, nullable), body (text), mood (1-5, nullable), tags (text[], default '{}'), created_at, updated_at. Added after v1 (migration 0002); journal entries never affect scoring.
 
-Indexes: check_ins (goal_id, logged_for), score_snapshots (goal_id, snapshot_date), goals (user_id, status).
+Indexes: check_ins (goal_id, logged_for), score_snapshots (goal_id, snapshot_date), goals (user_id, status), journal_entries (user_id, created_at).
 
 ## 6. API Contract (summary — full spec lives in docs/api-contract.yaml)
 
@@ -104,6 +105,7 @@ All routes prefixed /api/v1. Auth via Bearer token except /auth.
 - GET /dashboard (overall score, category scores, streaks, attention list, trend)
 - GET /reviews/weekly?week_start=YYYY-MM-DD
 - GET /settings/category-weights, PUT /settings/category-weights
+- GET /journal (search, tag, dates, paging), POST /journal, GET /journal/stats, GET /journal/export (Markdown for AI), GET /journal/{id}, PATCH /journal/{id}, DELETE /journal/{id}
 
 Error format: { "error": { "code": "STRING", "message": "human readable" } }
 

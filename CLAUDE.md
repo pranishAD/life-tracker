@@ -19,6 +19,7 @@ If anything conflicts with `docs/master-plan.md`, the master plan wins until Aay
 | backend-dev | backend/app/ (not models/), backend/tests/ (not scoring/) | FastAPI endpoints, auth, schemas, API tests |
 | frontend-dev | frontend/ | React app, pages, components, API client |
 | qa-tester | e2e/, docs/test-plan.md, docs/bugs.md | Test plan, Playwright e2e, bug reports |
+| security-reviewer | docs/security-review.md | Security review before merging auth/user-data features and before each deploy. Reports only, never edits code |
 
 Design is done OUTSIDE this repo in a separate Claude chat. Approved design output lands in `design/` (tokens.json, tailwind snippet, screenshots). Treat `design/` as read-only input. Never ask a subagent to invent the visual design; if `design/tokens.json` is missing, tell Aayush the frontend is blocked on design.
 

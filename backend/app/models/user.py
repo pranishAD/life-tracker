@@ -12,6 +12,7 @@ from .base import Base, TimestampMixin
 if TYPE_CHECKING:
     from .category_weight import CategoryWeight
     from .goal import Goal
+    from .journal_entry import JournalEntry
 
 
 class User(TimestampMixin, Base):
@@ -30,6 +31,9 @@ class User(TimestampMixin, Base):
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
     category_weights: Mapped[list["CategoryWeight"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
+    journal_entries: Mapped[list["JournalEntry"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
 

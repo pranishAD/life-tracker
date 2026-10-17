@@ -18,12 +18,20 @@ from app.routers.check_ins import router as check_ins_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.goals import router as goals_router
 from app.routers.internal import router as internal_router
+from app.routers.journal import router as journal_router
 from app.routers.milestones import router as milestones_router
 from app.routers.reviews import router as reviews_router
 from app.routers.scoring import router as scoring_router
 from app.routers.settings import router as settings_router
 
 API_PREFIX = "/api/v1"
+
+JOURNAL_EXPORT_HEADERS = [
+    "Content-Disposition",
+    "X-Journal-Entry-Count",
+    "X-Journal-Word-Count",
+    "X-Journal-Goal-Count",
+]
 
 
 def create_app() -> FastAPI:
@@ -36,6 +44,9 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Let the browser read the Markdown export's filename + summary
+        # headers cross-origin (GET /journal/export, api-contract.yaml).
+        expose_headers=JOURNAL_EXPORT_HEADERS,
     )
 
     register_exception_handlers(app)
@@ -52,6 +63,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router, prefix=API_PREFIX)
     app.include_router(reviews_router, prefix=API_PREFIX)
     app.include_router(settings_router, prefix=API_PREFIX)
+    app.include_router(journal_router, prefix=API_PREFIX)
     app.include_router(internal_router, prefix=API_PREFIX)
 
     return app

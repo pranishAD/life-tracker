@@ -1,7 +1,8 @@
 """Shared declarative base + timestamp mixin for all ORM models.
 
 Every table gets `created_at` (server-side `now()`). Tables whose rows are
-edited after creation (users, goals, milestones, category_weights) also get
+edited after creation (users, goals, milestones, category_weights,
+journal_entries) also get
 `updated_at`, maintained by the DB on every UPDATE. Append-only tables
 (check_ins, score_snapshots) only need `created_at` — there's no API route
 that edits a check-in or a snapshot in place, so `updated_at` would never

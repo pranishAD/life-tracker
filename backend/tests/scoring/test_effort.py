@@ -1,6 +1,6 @@
 from datetime import date
 
-from backend.scoring.formulas import effort
+from scoring.formulas import effort
 
 from .factories import make_check_in
 

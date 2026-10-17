@@ -1,6 +1,6 @@
 from datetime import date
 
-from backend.scoring.formulas import best_streak, current_streak
+from scoring.formulas import best_streak, current_streak
 
 from .factories import make_check_in
 
