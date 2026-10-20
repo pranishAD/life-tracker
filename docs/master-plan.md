@@ -18,7 +18,7 @@ Core loop: Create goal -> Log progress (check-in) -> App scores you -> See trend
 
 IN scope:
 1. Auth: sign up, log in, log out (email + password).
-2. Goals CRUD with categories: Fitness, Study, Career, Custom.
+2. Goals CRUD with categories: per-user, 4 defaults (Fitness, Study, Career, Custom) plus up to 12 total custom ones; goal emoji/colour; templates (added 2026-10-20, goal customisation).
 3. Three goal types:
    - Numeric: has target value + unit (e.g. Bench press 80 kg). Progress = current / target.
    - Habit: has frequency (e.g. 5 times per week). Progress = check-ins vs expected.
@@ -84,11 +84,12 @@ Rules:
 ## 5. Database Schema (v1 draft — db-architect finalises)
 
 - users: id (uuid), name, email (unique), password_hash, created_at
-- goals: id, user_id (fk), title, description, category (enum: fitness, study, career, custom), type (enum: numeric, habit, milestone), target_value (nullable), current_value (nullable), unit (nullable), frequency_per_week (nullable), start_date, deadline (nullable), weight (default 1), status (enum: active, completed, archived), created_at
+- goals: id, user_id (fk), title, description, category_id (fk → categories, same user), type (enum: numeric, habit, milestone), target_value (nullable), current_value (nullable), unit (nullable), frequency_per_week (nullable), start_date, deadline (nullable), weight (default 1), status (enum: active, completed, archived), created_at. Added in 0003: emoji, color (null = category's), start_value + direction (numeric: increase/decrease), frequency_type (habit: daily/per_week/weekdays) + weekdays (1=Mon..7=Sun), why (≤140), archived_at
 - milestones: id, goal_id (fk), title, due_date (nullable), is_done, done_at
 - check_ins: id, goal_id (fk), value (nullable), note (nullable), effort_rating (1-5), logged_for (date), created_at
 - score_snapshots: id, goal_id (fk), snapshot_date, pace, consistency, momentum, effort, total. Unique (goal_id, snapshot_date)
-- category_weights: user_id (fk), category, weight. PK (user_id, category)
+- category_weights: user_id (fk), category_id (fk), weight. PK (user_id, category_id). (Was keyed by the category enum until migration 0003.)
+- categories: id (uuid), user_id (fk, cascade), name (≤24, unique per user case-insensitive), emoji, color (one of 10 identity colours), sort_order, default_key (fitness/study/career/custom for the 4 defaults seeded on register, else null), created_at, updated_at. Max 12 per user; defaults can't be deleted. Added by migration 0003 (goal customisation), which replaced goals.category (enum) with goals.category_id.
 - journal_entries: id (uuid), user_id (fk, on delete cascade), title (varchar 120, nullable), body (text), mood (1-5, nullable), tags (text[], default '{}'), created_at, updated_at. Added after v1 (migration 0002); journal entries never affect scoring.
 
 Indexes: check_ins (goal_id, logged_for), score_snapshots (goal_id, snapshot_date), goals (user_id, status), journal_entries (user_id, created_at).
@@ -98,6 +99,7 @@ Indexes: check_ins (goal_id, logged_for), score_snapshots (goal_id, snapshot_dat
 All routes prefixed /api/v1. Auth via Bearer token except /auth.
 
 - POST /auth/register, POST /auth/login, GET /auth/me
+- GET /categories, POST /categories, PATCH /categories/{id}, DELETE /categories/{id}?move_to=, PATCH /categories/order
 - GET /goals, POST /goals, GET /goals/{id}, PATCH /goals/{id}, DELETE /goals/{id}
 - POST /goals/{id}/milestones, PATCH /milestones/{id}, DELETE /milestones/{id}
 - GET /goals/{id}/check-ins, POST /goals/{id}/check-ins, DELETE /check-ins/{id}

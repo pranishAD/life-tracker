@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Check, ChevronLeft, Hourglass, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
+import { Archive, Check, ChevronLeft, Hourglass, Pencil, Plus, Trash2 } from "lucide-react";
 import Button from "../components/Button";
 import Card from "../components/Card";
 import ChartCard from "../components/ChartCard";
 import ErrorState from "../components/ErrorState";
-import GoalFormModal from "../components/GoalFormModal";
+import CategoryChip from "../components/CategoryChip";
+import EmojiTile from "../components/EmojiTile";
 import GradeBadge from "../components/GradeBadge";
 import ProgressBar from "../components/ProgressBar";
 import ScoreRing from "../components/ScoreRing";
@@ -13,10 +14,11 @@ import Skeleton from "../components/Skeleton";
 import { useCheckInModal } from "../context/CheckInModalContext";
 import { useToast } from "../context/ToastContext";
 import { useCheckIns, useDeleteCheckIn } from "../hooks/useCheckIns";
-import { useAddMilestone, useDeleteGoal, useGoal, useUpdateMilestone } from "../hooks/useGoals";
+import { useAddMilestone, useGoal, useUpdateMilestone } from "../hooks/useGoals";
 import { useGoalScore, useGoalScoreHistory } from "../hooks/useScoring";
 import { useHabitExtras } from "../hooks/useGoalExtras";
-import { CATEGORY_ICONS, CATEGORY_LABELS } from "../lib/category";
+import { scheduleLabel } from "../lib/frequency";
+import { goalIdentity } from "../lib/identity";
 import { formatShort, isPast } from "../lib/date";
 import { TEXT_LIMITS } from "../lib/limits";
 import { gradeToKey, scoreToGradeKey, type GradeKey } from "../lib/grade";
@@ -37,9 +39,6 @@ export default function GoalDetailPage() {
   const [historyDays, setHistoryDays] = useState<7 | 30>(30);
   const { data: history, isLoading: historyLoading, isError: historyError, refetch: refetchHistory } =
     useGoalScoreHistory(goalId, historyDays);
-  const [showEdit, setShowEdit] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const deleteGoal = useDeleteGoal();
 
   if (isLoading) {
     return (
@@ -69,15 +68,8 @@ export default function GoalDetailPage() {
         : habitProgress(goal, checkInsThisWeek);
   const paceTick = expectedProgressPercent(goal);
 
-  async function handleDelete() {
-    if (!goal) return;
-    const warn = goal.status === "active" ? "This also removes its check-in history. " : "";
-    if (!window.confirm(`${warn}Delete "${goal.title}"? This can't be undone.`)) return;
-    await deleteGoal.mutateAsync(goal.id);
-    navigate("/goals");
-  }
-
-  const Icon = CATEGORY_ICONS[goal.category];
+  const identity = goalIdentity(goal);
+  const editGoal = () => navigate(`/goals/${goal.id}/edit`);
 
   return (
     <div>
@@ -85,12 +77,14 @@ export default function GoalDetailPage() {
         <Link to="/goals" className="inline-flex items-center gap-1.5 text-body-sm text-ink-muted">
           <ChevronLeft className="w-4 h-4" /> Goals
         </Link>
-        <div className="relative">
-          <Button size="sm" variant="ghost" onClick={() => setMenuOpen((v) => !v)}>
-            <MoreHorizontal className="w-4 h-4" />
-          </Button>
-          {menuOpen && <GoalMenu onEdit={() => { setShowEdit(true); setMenuOpen(false); }} onDelete={handleDelete} />}
-        </div>
+        <button
+          type="button"
+          onClick={editGoal}
+          aria-label="Edit goal"
+          className="w-9 h-9 rounded-md grid place-items-center text-ink-muted hover:text-ink hover:bg-surface-2 focus-visible:shadow-focus focus-visible:outline-none"
+        >
+          <Pencil className="w-4 h-4" />
+        </button>
       </div>
       <Link to="/goals" className="hidden md:inline-flex items-center gap-1.5 text-body-sm text-ink-muted mb-4">
         <ChevronLeft className="w-4 h-4" /> All goals
@@ -101,11 +95,9 @@ export default function GoalDetailPage() {
           <ScoreRing score={score?.total ?? null} grade={gradeKey} size={140} strokeWidth={12} showCaption scoreFontSize={40} />
           <div className="min-w-0 flex-1">
             <div className="flex gap-2 flex-wrap items-center justify-center md:justify-start mb-2">
-              <span className="text-label uppercase text-ink-muted bg-surface-2 rounded-sm px-2 py-1 inline-flex items-center gap-1">
-                <Icon className="w-4 h-4" /> {CATEGORY_LABELS[goal.category]}
-              </span>
+              <CategoryChip category={goal.category} />
               <span className="text-label uppercase text-ink-muted bg-surface-2 rounded-sm px-2 py-1">
-                {goal.type === "habit" ? `Habit · ${goal.frequency_per_week}x / week` : goal.type[0].toUpperCase() + goal.type.slice(1)}
+                {goal.type === "habit" ? `Habit · ${scheduleLabel(goal)}` : goal.type[0].toUpperCase() + goal.type.slice(1)}
               </span>
               <span className="text-body-sm text-ink-muted">
                 {goal.deadline
@@ -113,7 +105,10 @@ export default function GoalDetailPage() {
                   : `Started ${formatShort(goal.start_date)} · no deadline`}
               </span>
             </div>
-            <h1 className="text-display-mobile md:text-display mb-4">{goal.title}</h1>
+            <div className="flex items-center gap-3 justify-center md:justify-start mb-4">
+              <EmojiTile emoji={identity.emoji} color={identity.color} />
+              <h1 className="text-display-mobile md:text-display break-words min-w-0">{goal.title}</h1>
+            </div>
             <ProgressBar
               percent={progress.percent}
               grade={gradeKey}
@@ -125,17 +120,26 @@ export default function GoalDetailPage() {
               <Button icon={<Plus className="w-5 h-5" />} onClick={() => openCheckIn(goal.id)}>
                 Log check-in
               </Button>
-              <Button variant="secondary" className="hidden md:inline-flex" icon={<Pencil className="w-4 h-4" />} onClick={() => setShowEdit(true)}>
+              <Button variant="secondary" className="hidden md:inline-flex" icon={<Pencil className="w-4 h-4" />} onClick={editGoal}>
                 Edit goal
-              </Button>
-              <Button variant="ghost" className="hidden md:inline-flex" icon={<Trash2 className="w-4 h-4" />} onClick={handleDelete}>
-                Delete
               </Button>
               <GradeBadge grade={gradeKey} showLabel />
             </div>
           </div>
         </div>
       </Card>
+
+      {goal.status === "archived" && (
+        <div className="flex gap-3 items-start bg-surface-2 border border-dashed border-border-strong rounded-lg p-4 md:p-5 mt-6 md:mt-8">
+          <Archive className="w-5 h-5 text-ink-muted mt-0.5 flex-none" />
+          <div>
+            <p className="font-semibold text-body">Archived</p>
+            <p className="text-body-sm text-ink-muted">
+              This goal is hidden from your dashboard and doesn't count toward your score. Restore it from Edit goal.
+            </p>
+          </div>
+        </div>
+      )}
 
       {isCal && (
         <div className="flex gap-3 items-start bg-surface-2 border border-dashed border-border-strong rounded-lg p-4 md:p-5 mt-6 md:mt-8">
@@ -180,21 +184,6 @@ export default function GoalDetailPage() {
         {goal.type === "milestone" && <MilestonesCard goal={goal} />}
         <CheckInsCard goalId={goal.id} goal={goal} />
       </div>
-
-      {showEdit && <GoalFormModal goal={goal} onClose={() => setShowEdit(false)} />}
-    </div>
-  );
-}
-
-function GoalMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
-  return (
-    <div className="absolute right-0 top-10 bg-surface-3 rounded-md shadow-modal py-1 w-36 z-10">
-      <button className="w-full text-left px-3 py-2 text-body-sm hover:bg-surface-2 flex items-center gap-2" onClick={onEdit}>
-        <Pencil className="w-4 h-4" /> Edit goal
-      </button>
-      <button className="w-full text-left px-3 py-2 text-body-sm hover:bg-surface-2 flex items-center gap-2 text-grade-d" onClick={onDelete}>
-        <Trash2 className="w-4 h-4" /> Delete
-      </button>
     </div>
   );
 }

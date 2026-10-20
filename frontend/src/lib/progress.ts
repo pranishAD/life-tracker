@@ -4,6 +4,7 @@
 // the bar, without touching the DOM or React.
 import type { Goal } from "../api/types";
 import { addDays, daysBetween, todayIso } from "./date";
+import { expectedPerWeek } from "./frequency";
 
 export interface ProgressInfo {
   percent: number;
@@ -11,15 +12,28 @@ export interface ProgressInfo {
   metaRight: string;
 }
 
+/**
+ * Numeric progress runs from start_value to target_value, so it works both
+ * ways: bench 60 → 80 kg (increase) and 5 km 32 → 28 min (decrease).
+ * progress = (current - start) / (target - start), clamped to 0..1.
+ */
+export function numericFraction(start: number, current: number, target: number): number {
+  if (target === start) return current === target ? 1 : 0;
+  const f = (current - start) / (target - start);
+  return Math.max(0, Math.min(1, f));
+}
+
 export function numericProgress(goal: Goal): ProgressInfo {
-  const current = goal.current_value ?? 0;
+  const start = goal.start_value ?? 0;
+  const current = goal.current_value ?? start;
   const target = goal.target_value ?? 0;
-  const percent = target > 0 ? Math.min(100, (current / target) * 100) : 0;
   const unit = goal.unit ?? "";
+  // Decrease goals read better as "30 → 28 min" than "30 / 28 min".
+  const sep = target < start ? " → " : " / ";
   return {
-    percent,
+    percent: numericFraction(start, current, target) * 100,
     metaLeft: goal.title,
-    metaRight: `${formatNum(current)} / ${formatNum(target)} ${unit}`.trim(),
+    metaRight: `${formatNum(current)}${sep}${formatNum(target)} ${unit}`.trim(),
   };
 }
 
@@ -31,9 +45,11 @@ export function milestoneProgress(goal: Goal): ProgressInfo & { done: number; to
 }
 
 /** Habit progress needs this week's check-in count, which the caller fetches
- * separately (the Goal object alone doesn't carry it) — see useGoalExtras. */
+ * separately (the Goal object alone doesn't carry it) — see useGoalExtras.
+ * "Expected this week" comes from the schedule: daily 7, per_week N,
+ * weekdays = the picked days. */
 export function habitProgress(goal: Goal, checkInsThisWeek: number): ProgressInfo {
-  const target = goal.frequency_per_week ?? 0;
+  const target = expectedPerWeek(goal);
   const percent = target > 0 ? Math.min(100, (checkInsThisWeek / target) * 100) : 0;
   return {
     percent,
@@ -42,8 +58,9 @@ export function habitProgress(goal: Goal, checkInsThisWeek: number): ProgressInf
   };
 }
 
-function formatNum(n: number): string {
-  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+export function formatNum(n: number): string {
+  // 50000 → "50,000"; keep up to 2 decimals for things like 72.5 kg.
+  return n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 /**

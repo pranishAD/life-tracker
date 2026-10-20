@@ -19,6 +19,7 @@ from app.schemas.auth import (
     UpdateProfileRequest,
     UserOut,
 )
+from app.services.categories import seed_default_categories
 from db.session import get_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -41,6 +42,9 @@ def register(payload: RegisterRequest, db: Session = Depends(get_session)) -> Au
         password_hash=hash_password(payload.password),
     )
     db.add(user)
+    db.flush()  # assigns user.id
+    # The 4 default categories, committed in the same transaction as the user.
+    seed_default_categories(db, user.id)
     db.commit()
     db.refresh(user)
 

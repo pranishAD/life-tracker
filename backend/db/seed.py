@@ -1,6 +1,12 @@
 """Dev-only seed script: wipes and recreates two demo users with realistic
-goals/milestones/check-ins/category-weights, then runs every goal through
-the real scoring engine (backend/scoring) to populate score_snapshots.
+categories/goals/milestones/check-ins/category-weights, then runs every goal
+through the real scoring engine (backend/scoring) to populate score_snapshots.
+
+Since migration 0003 (goal customisation) each user gets the 4 default
+categories (app.models.DEFAULT_CATEGORIES); the demo user also gets a custom
+"Side project" category, and goals that exercise every new goal field:
+a decrease numeric goal, daily / per_week / weekdays habits, a goal with
+emoji + colour + "why", and an archived goal with archived_at.
 
 That last part is deliberate, not decorative: it's the cheapest way to prove
 the ORM models in app/models line up with what backend/scoring/types.py and
@@ -18,8 +24,8 @@ Refuses to run against what looks like production (DATABASE_URL contains
 accounts have passwords published in this repo.
 
 Safe to re-run: it deletes the two seed users (by email) first; ON DELETE
-CASCADE takes their goals/milestones/check-ins/snapshots/category_weights/
-journal_entries with them, then everything is recreated fresh.
+CASCADE takes their categories/goals/milestones/check-ins/snapshots/
+category_weights/journal_entries with them, then everything is recreated fresh.
 """
 
 from __future__ import annotations
@@ -43,20 +49,25 @@ from sqlalchemy import func, select  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app.models import (  # noqa: E402
+    DEFAULT_CATEGORIES,
     Category,
     CategoryWeight,
     CheckIn,
+    FrequencyType,
     Goal,
     GoalStatus,
     GoalType,
+    IdentityColor,
     JournalEntry,
     Milestone,
+    NumericDirection,
     ScoreSnapshot,
     User,
 )
 from db.session import SessionLocal  # noqa: E402
 from scoring import (  # noqa: E402
     CheckIn as SCheckIn,
+    FrequencyType as SFrequencyType,
     Goal as SGoal,
     GoalStatus as SGoalStatus,
     GoalType as SGoalType,
@@ -111,6 +122,11 @@ def to_scoring_goal(goal: Goal) -> SGoal:
         ),
         deadline=goal.deadline,
         weight=float(goal.weight),
+        start_value=float(goal.start_value) if goal.start_value is not None else None,
+        frequency_type=(
+            SFrequencyType(goal.frequency_type.value) if goal.frequency_type is not None else None
+        ),
+        weekdays=tuple(goal.weekdays) if goal.weekdays is not None else None,
     )
 
 
@@ -185,16 +201,19 @@ def make_check_ins(
     skip_prob: float,
     value_fn=None,
     note_pool: Optional[Sequence[str]] = None,
+    only_weekdays: Optional[Sequence[int]] = None,
     rng: random.Random,
 ) -> list[CheckIn]:
     """One check-in per non-skipped day in [start, end], with varying effort
-    and an optional, type-appropriate `value`.
+    and an optional, type-appropriate `value`. `only_weekdays` (ISO 1-7)
+    restricts check-ins to those days (for frequency_type = weekdays goals).
     """
     check_ins: list[CheckIn] = []
     d = start
     day_index = 0
     while d <= end:
-        if rng.random() >= skip_prob:
+        on_schedule = only_weekdays is None or d.isoweekday() in only_weekdays
+        if on_schedule and rng.random() >= skip_prob:
             effort_rating = rng.choices([1, 2, 3, 4, 5], weights=[3, 8, 24, 40, 25])[0]
             value = value_fn(day_index, d) if value_fn else None
             note = rng.choice(note_pool) if note_pool and rng.random() < 0.3 else None
@@ -217,6 +236,21 @@ def make_check_ins(
 # --------------------------------------------------------------------------
 
 
+def create_categories(
+    session: Session, user: User, extra: Sequence[tuple[str, str, IdentityColor]] = ()
+) -> dict[str, Category]:
+    """The 4 default categories (same as backend-dev's register flow) plus any
+    `extra` custom ones (name, emoji, colour). Returned dict is keyed by
+    default_key for defaults and by name for extras.
+    """
+    rows = [Category(user_id=user.id, **d._asdict()) for d in DEFAULT_CATEGORIES]
+    for i, (name, emoji, color) in enumerate(extra, start=len(rows)):
+        rows.append(Category(user_id=user.id, name=name, emoji=emoji, color=color, sort_order=i))
+    session.add_all(rows)
+    session.flush()  # assign ids
+    return {(c.default_key or c.name): c for c in rows}
+
+
 def seed_demo_user(session: Session, rng: random.Random) -> User:
     user = User(
         name="Demo User",
@@ -226,12 +260,17 @@ def seed_demo_user(session: Session, rng: random.Random) -> User:
     session.add(user)
     session.flush()  # assign user.id
 
+    cats = create_categories(
+        session, user, extra=[("Side project", "\U0001F6E0\uFE0F", IdentityColor.CYAN)]  # hammer and wrench
+    )
+
+    # No weight row for "Side project" -> it uses the default weight 1.
     session.add_all(
         [
-            CategoryWeight(user_id=user.id, category=Category.FITNESS, weight=Decimal("1.5")),
-            CategoryWeight(user_id=user.id, category=Category.STUDY, weight=Decimal("1.0")),
-            CategoryWeight(user_id=user.id, category=Category.CAREER, weight=Decimal("1.2")),
-            CategoryWeight(user_id=user.id, category=Category.CUSTOM, weight=Decimal("0.8")),
+            CategoryWeight(user_id=user.id, category_id=cats["fitness"].id, weight=Decimal("1.5")),
+            CategoryWeight(user_id=user.id, category_id=cats["study"].id, weight=Decimal("1.0")),
+            CategoryWeight(user_id=user.id, category_id=cats["career"].id, weight=Decimal("1.2")),
+            CategoryWeight(user_id=user.id, category_id=cats["custom"].id, weight=Decimal("0.8")),
         ]
     )
 
@@ -240,8 +279,10 @@ def seed_demo_user(session: Session, rng: random.Random) -> User:
         user_id=user.id,
         title="Bench press 80kg",
         description="Progressive overload, 3x/week.",
-        category=Category.FITNESS,
+        category_id=cats["fitness"].id,
         type=GoalType.NUMERIC,
+        start_value=Decimal("50"),
+        direction=NumericDirection.INCREASE,
         target_value=Decimal("80"),
         current_value=Decimal("50"),  # overwritten below from the last check-in
         unit="kg",
@@ -280,8 +321,9 @@ def seed_demo_user(session: Session, rng: random.Random) -> User:
         user_id=user.id,
         title="Read 30 minutes daily",
         description="Technical reading for the semester.",
-        category=Category.STUDY,
+        category_id=cats["study"].id,
         type=GoalType.HABIT,
+        frequency_type=FrequencyType.PER_WEEK,
         frequency_per_week=5,
         start_date=TODAY - timedelta(days=30),
         deadline=TODAY + timedelta(days=30),
@@ -306,7 +348,7 @@ def seed_demo_user(session: Session, rng: random.Random) -> User:
         user_id=user.id,
         title="Finish portfolio website",
         description="Ship v1 of the personal site before applying to jobs.",
-        category=Category.CAREER,
+        category_id=cats["career"].id,
         type=GoalType.MILESTONE,
         start_date=TODAY - timedelta(days=40),
         deadline=TODAY + timedelta(days=20),
@@ -366,8 +408,9 @@ def seed_demo_user(session: Session, rng: random.Random) -> User:
         user_id=user.id,
         title="Meditate 10 minutes",
         description="Daily calm-down habit, no fixed end date.",
-        category=Category.CUSTOM,
+        category_id=cats["custom"].id,
         type=GoalType.HABIT,
+        frequency_type=FrequencyType.DAILY,
         frequency_per_week=7,
         start_date=TODAY - timedelta(days=20),
         deadline=None,
@@ -386,13 +429,148 @@ def seed_demo_user(session: Session, rng: random.Random) -> User:
     )
     session.add_all(meditate_check_ins)
 
+    # ---- Goal-customisation examples (migration 0003) ----------------------
+
+    # 5. Fitness / numeric DECREASE: 5 km run 32 -> 28 min, now ~30.
+    run_5k = Goal(
+        user_id=user.id,
+        title="Run 5 km under 28 min",
+        category_id=cats["fitness"].id,
+        emoji="\u23F1\uFE0F",  # stopwatch
+        type=GoalType.NUMERIC,
+        start_value=Decimal("32"),
+        target_value=Decimal("28"),
+        current_value=Decimal("32"),  # overwritten below from the last check-in
+        unit="min",
+        direction=NumericDirection.DECREASE,
+        frequency_per_week=3,
+        start_date=TODAY - timedelta(days=28),
+        deadline=TODAY + timedelta(days=35),
+        weight=Decimal("1"),
+        status=GoalStatus.ACTIVE,
+        created_at=created_at_for(TODAY - timedelta(days=28)),
+    )
+    session.add(run_5k)
     session.flush()
 
+    def run_value(day_index: int, _d: date) -> float:
+        # 32:00 -> ~30:00 over 28 days, with +-20s of noise.
+        return 32 - (2 * day_index / 28) + rng.uniform(-0.3, 0.3)
+
+    run_check_ins = make_check_ins(
+        run_5k,
+        run_5k.start_date,
+        TODAY,
+        skip_prob=0.55,
+        value_fn=run_value,
+        note_pool=["Negative split!", "Windy, slow first km", "Legs heavy from gym"],
+        rng=rng,
+    )
+    session.add_all(run_check_ins)
+    session.flush()
+    latest_run = max(run_check_ins, key=lambda c: c.logged_for, default=None)
+    if latest_run is not None and latest_run.value is not None:
+        run_5k.current_value = latest_run.value
+
+    # 6. Fitness / habit WEEKDAYS Mon, Tue, Thu, Fri, Sat + emoji, colour, why.
+    gym_days = [1, 2, 4, 5, 6]
+    gym = Goal(
+        user_id=user.id,
+        title="Gym on training days",
+        category_id=cats["fitness"].id,
+        emoji="\U0001F3CB\uFE0F",  # weight lifter
+        color=IdentityColor.ROSE,
+        why="Play futsal again without getting gassed",
+        type=GoalType.HABIT,
+        frequency_type=FrequencyType.WEEKDAYS,
+        weekdays=gym_days,
+        frequency_per_week=len(gym_days),
+        start_date=TODAY - timedelta(days=25),
+        deadline=None,
+        weight=Decimal("1.2"),
+        status=GoalStatus.ACTIVE,
+        created_at=created_at_for(TODAY - timedelta(days=25)),
+    )
+    session.add(gym)
+    session.flush()
+    gym_check_ins = make_check_ins(
+        gym,
+        gym.start_date,
+        TODAY,
+        skip_prob=0.2,
+        only_weekdays=gym_days,
+        note_pool=["Push day", "Pull day", "Legs, brutal", "Short session"],
+        rng=rng,
+    )
+    session.add_all(gym_check_ins)
+
+    # 7. Side project (custom category) / habit PER_WEEK 3.
+    side = Goal(
+        user_id=user.id,
+        title="Code on the CLI tool",
+        description="Ship the habit-buddy CLI prototype.",
+        category_id=cats["Side project"].id,
+        type=GoalType.HABIT,
+        frequency_type=FrequencyType.PER_WEEK,
+        frequency_per_week=3,
+        start_date=TODAY - timedelta(days=18),
+        deadline=TODAY + timedelta(days=40),
+        weight=Decimal("1"),
+        status=GoalStatus.ACTIVE,
+        created_at=created_at_for(TODAY - timedelta(days=18)),
+    )
+    session.add(side)
+    session.flush()
+    side_check_ins = make_check_ins(
+        side,
+        side.start_date,
+        TODAY,
+        skip_prob=0.6,
+        note_pool=["Wrote the parser", "Added tests", "Refactor, no new features"],
+        rng=rng,
+    )
+    session.add_all(side_check_ins)
+
+    # 8. ARCHIVED habit with archived_at (status archived <=> archived_at set).
+    archived_at = created_at_for(TODAY - timedelta(days=12))
+    guitar = Goal(
+        user_id=user.id,
+        title="Practice guitar",
+        category_id=cats["custom"].id,
+        emoji="\U0001F3B8",  # guitar
+        type=GoalType.HABIT,
+        frequency_type=FrequencyType.PER_WEEK,
+        frequency_per_week=4,
+        start_date=TODAY - timedelta(days=50),
+        deadline=None,
+        weight=Decimal("1"),
+        status=GoalStatus.ARCHIVED,
+        archived_at=archived_at,
+        created_at=created_at_for(TODAY - timedelta(days=50)),
+        updated_at=archived_at,
+    )
+    session.add(guitar)
+    session.flush()
+    guitar_check_ins = make_check_ins(
+        guitar,
+        guitar.start_date,
+        TODAY - timedelta(days=13),
+        skip_prob=0.5,
+        rng=rng,
+    )
+    session.add_all(guitar_check_ins)
+
+    session.flush()
+
+    # Archived goals are not scored, so no snapshots for `guitar`.
     for goal, check_ins, milestones in (
         (bench, bench_check_ins, []),
         (reading, reading_check_ins, []),
         (portfolio, portfolio_check_ins, portfolio_milestones),
         (meditate, meditate_check_ins, []),
+        (run_5k, run_check_ins, []),
+        (gym, gym_check_ins, []),
+        (side, side_check_ins, []),
     ):
         session.add_all(build_snapshots(goal, check_ins, milestones))
 
@@ -506,6 +684,7 @@ def seed_second_user(session: Session, rng: random.Random) -> User:
     )
     session.add(user)
     session.flush()
+    cats = create_categories(session, user)
     # Deliberately NO category_weights rows for this user -> exercises the
     # "default equal if unset" rule in GET /settings/category-weights.
 
@@ -517,8 +696,10 @@ def seed_second_user(session: Session, rng: random.Random) -> User:
         user_id=user.id,
         title="1000 pushups this month",
         description=None,
-        category=Category.FITNESS,
+        category_id=cats["fitness"].id,
         type=GoalType.NUMERIC,
+        start_value=Decimal("0"),
+        direction=NumericDirection.INCREASE,
         target_value=Decimal("1000"),
         current_value=Decimal("0"),
         unit="reps",
@@ -553,7 +734,7 @@ def seed_second_user(session: Session, rng: random.Random) -> User:
         user_id=user.id,
         title="Finish ITAP3010 assignment",
         description="Database design report.",
-        category=Category.STUDY,
+        category_id=cats["study"].id,
         type=GoalType.MILESTONE,
         start_date=TODAY - timedelta(days=14),
         deadline=TODAY + timedelta(days=7),
@@ -606,8 +787,9 @@ def seed_second_user(session: Session, rng: random.Random) -> User:
         user_id=user.id,
         title="Apply to 3 jobs per week",
         description=None,
-        category=Category.CAREER,
+        category_id=cats["career"].id,
         type=GoalType.HABIT,
+        frequency_type=FrequencyType.PER_WEEK,
         frequency_per_week=3,
         start_date=TODAY - timedelta(days=21),
         deadline=None,
@@ -653,7 +835,7 @@ def wipe_seed_users(session: Session) -> None:
 
 
 def print_row_counts(session: Session) -> None:
-    for model in (User, Goal, Milestone, CheckIn, ScoreSnapshot, CategoryWeight, JournalEntry):
+    for model in (User, Category, Goal, Milestone, CheckIn, ScoreSnapshot, CategoryWeight, JournalEntry):
         count = session.scalar(select(func.count()).select_from(model))
         print(f"{model.__tablename__:<18} {count}")
 

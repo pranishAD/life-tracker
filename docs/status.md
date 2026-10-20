@@ -22,6 +22,12 @@ Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Depl
 | qa-tester | Waiting | Phase 5 — test-plan.md + Playwright e2e against user-stories.md, once Phase 6 launch is live |
 | Designer (separate chat) | Done | Tokens, components, and all 6 screens (desktop + mobile) delivered |
 
+## Goal customisation (branch feature/goal-customisation, NOT merged, waiting for Aayush)
+Per-user categories (4 defaults, max 12, reorder, delete-with-move), goal emoji/colour/start value/direction/habit schedule/why/archive, screens 10-12b. Branched from security/review-1, so **merge security/review-1 first**.
+- Migration 0003_goal_customisation: tested on a copy of seeded dev data (up, down, up again; no data loss, existing scores unchanged). NOT yet run on Neon or the local dev DB.
+- Tests: backend 480 passed (incl. 171 scoring + legacy-score regression), frontend 182 passed, build clean. Not yet checked in a browser against the real backend.
+- Open: scoring Interpretations #8-#10, extra CHECK constraints, frequency_per_week kept instead of times_per_week, Settings Notifications/Data tabs omitted, lint config missing (pre-existing).
+
 ## Security review 1 (branch security/review-1, NOT merged, waiting for Aayush)
 Verdict after re-check (security-reviewer, 2026-10-20): **OK to ship** — 0 critical, 0 high/medium open in code; 16 findings total (SEC-001..016). Full report: docs/security-review.md
 - Isolation: user A vs user B (goals, milestones, check-ins, scores, journal incl. search/stats/export) 37/37 passed, before and after the fixes

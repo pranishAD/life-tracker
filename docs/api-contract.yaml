@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Life Tracker API
-  version: "1.0.0"
+  version: "1.1.0"
   description: >
     Contract between backend and frontend for Life Tracker v1.
     All routes are prefixed /api/v1. Auth is a Bearer JWT on every route
@@ -20,6 +20,12 @@ security:
 
 tags:
   - name: auth
+  - name: categories
+    description: >
+      Per-user goal categories. Every user gets 4 defaults on register
+      (Fitness 🏃 teal, Study 📚 violet, Career 💼 indigo, Custom ✨ slate),
+      which can be renamed/recoloured but never deleted. Max 12 per user.
+      Another user's (or a missing) category is always 404.
   - name: goals
   - name: milestones
   - name: check-ins
@@ -150,16 +156,166 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /categories:
+    get:
+      tags: [categories]
+      summary: List the user's categories in display order (sort_order ascending)
+      responses:
+        "200":
+          description: All of the user's categories (4 defaults + any custom ones, max 12)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [categories]
+      summary: Create a custom category (screen 12b). Appended at the end of the order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryCreateRequest"
+      responses:
+        "201":
+          description: Category created (is_default false, goal_count 0)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "409":
+          description: >
+            CATEGORY_LIMIT_REACHED (user already has 12 categories) or
+            CATEGORY_NAME_TAKEN (same name, case-insensitive, after trimming)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /categories/order:
+    patch:
+      tags: [categories]
+      summary: Reorder categories (drag to reorder on screen 12)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryOrderRequest"
+      responses:
+        "200":
+          description: All categories in the new order (sort_order rewritten 0..n-1)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+        "422":
+          description: >
+            VALIDATION_ERROR when category_ids is not exactly the user's full
+            set of category ids (missing, extra, duplicate or foreign ids)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /categories/{categoryId}:
+    parameters:
+      - name: categoryId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      tags: [categories]
+      summary: Rename / recolour / change emoji. Defaults can be edited too.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryUpdateRequest"
+      responses:
+        "200":
+          description: Updated category
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+        "409":
+          description: CATEGORY_NAME_TAKEN
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    delete:
+      tags: [categories]
+      summary: Delete a custom category, moving its goals to another category
+      description: >
+        Default categories can't be deleted (409 CATEGORY_IS_DEFAULT).
+        If the category has goals (any status, archived included), `move_to`
+        is required: every goal is moved to that category first, then the
+        category and its weight are deleted, in one transaction. Without
+        `move_to` a category with goals gets 409 CATEGORY_HAS_GOALS. An empty
+        category is deleted straight away and `move_to` is ignored.
+      parameters:
+        - name: move_to
+          in: query
+          required: false
+          description: Another category of the same user. Same id as the one being deleted, or another user's / unknown id → 422 INVALID_MOVE_TARGET.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+        "409":
+          description: CATEGORY_IS_DEFAULT or CATEGORY_HAS_GOALS
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: INVALID_MOVE_TARGET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /goals:
     get:
       tags: [goals]
       summary: List goals, optionally filtered by category (US-05)
       parameters:
-        - name: category
+        - name: category_id
           in: query
           required: false
+          description: Only goals in this category. Unknown or another user's id → empty list.
           schema:
-            $ref: "#/components/schemas/Category"
+            type: string
+            format: uuid
         - name: status
           in: query
           required: false
@@ -221,7 +377,21 @@ paths:
           $ref: "#/components/responses/Unauthorized"
     patch:
       tags: [goals]
-      summary: Edit a goal (US-06, EC-05)
+      summary: Edit a goal (US-06, EC-05, screen 11b)
+      description: >
+        Partial update. After applying the fields sent, the WHOLE goal is
+        re-validated with the same type rules as create (see
+        GoalCreateRequest), so e.g. sending only target_value below
+        start_value on an "increase" goal re-derives direction to "decrease"
+        unless direction is also sent. `type` can only change while the goal
+        has zero check-ins (409 TYPE_LOCKED otherwise). When the type
+        changes, the client may send explicit null for the old type's fields
+        (start_value, target_value, unit, direction, frequency_type,
+        weekdays, frequency_per_week); null means "clear it" and is accepted,
+        and the server also clears them itself. Sending null for a field that
+        the resulting type requires is a 422. Setting status to
+        "archived" sets archived_at to now; setting it to anything else
+        clears archived_at.
       requestBody:
         required: true
         content:
@@ -235,6 +405,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Goal"
+        "409":
+          description: TYPE_LOCKED (type sent and different, but the goal already has check-ins)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "422":
           $ref: "#/components/responses/ValidationError"
         "404":
@@ -915,9 +1091,122 @@ components:
           required: [code, message]
       required: [error]
 
-    Category:
+    IdentityColor:
       type: string
-      enum: [fitness, study, career, custom]
+      description: User-picked identity colour (design/tokens.json colors.identity). Only tints emoji tiles, chips, dots and swatches; never grades.
+      enum: [slate, violet, purple, pink, rose, sand, lime, teal, cyan, indigo]
+
+    Emoji:
+      type: string
+      minLength: 1
+      maxLength: 16
+      description: >
+        One emoji (the frontend picker guarantees a single grapheme). The
+        server only checks 1-16 characters (code points, enough for ZWJ
+        sequences and skin tones) and no whitespace.
+
+    CategoryRef:
+      type: object
+      description: The category fields embedded in a Goal and in dashboard category scores.
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        emoji:
+          $ref: "#/components/schemas/Emoji"
+        color:
+          $ref: "#/components/schemas/IdentityColor"
+      required: [id, name, emoji, color]
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 24
+        emoji:
+          $ref: "#/components/schemas/Emoji"
+        color:
+          $ref: "#/components/schemas/IdentityColor"
+        sort_order:
+          type: integer
+          description: 0-based position; order on Settings, dashboard category card, filters and pickers
+        is_default:
+          type: boolean
+          description: One of the 4 seeded categories. Can be renamed/recoloured, never deleted.
+        goal_count:
+          type: integer
+          description: Goals in this category, any status (archived included, since delete must move them too)
+        created_at:
+          type: string
+          format: date-time
+      required: [id, name, emoji, color, sort_order, is_default, goal_count, created_at]
+
+    CategoryCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 24
+          description: Trimmed by the server; empty after trimming → 422. Unique per user, case-insensitive (409 CATEGORY_NAME_TAKEN).
+        emoji:
+          $ref: "#/components/schemas/Emoji"
+        color:
+          $ref: "#/components/schemas/IdentityColor"
+      required: [name, emoji, color]
+
+    CategoryUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 24
+        emoji:
+          $ref: "#/components/schemas/Emoji"
+        color:
+          $ref: "#/components/schemas/IdentityColor"
+      minProperties: 1
+
+    CategoryOrderRequest:
+      type: object
+      properties:
+        category_ids:
+          type: array
+          description: Every one of the user's category ids, exactly once, in the new order.
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 12
+      required: [category_ids]
+
+    NumericDirection:
+      type: string
+      enum: [increase, decrease]
+      description: increase = target above start (bench 60 → 80 kg); decrease = target below start (5 km 32 → 28 min).
+
+    FrequencyType:
+      type: string
+      enum: [daily, per_week, weekdays]
+      description: >
+        Habit schedule. daily = every day (frequency_per_week is set to 7 by
+        the server). per_week = frequency_per_week times a week, any days.
+        weekdays = only the days in `weekdays` (frequency_per_week is set to
+        the number of days by the server); missing an unscheduled day costs
+        nothing.
+
+    Weekday:
+      type: integer
+      minimum: 1
+      maximum: 7
+      description: ISO weekday, 1 = Monday … 7 = Sunday
 
     GoalType:
       type: string
@@ -1054,10 +1343,26 @@ components:
         description:
           type: string
           nullable: true
+        category_id:
+          type: string
+          format: uuid
         category:
-          $ref: "#/components/schemas/Category"
+          $ref: "#/components/schemas/CategoryRef"
+        emoji:
+          type: string
+          nullable: true
+          description: null → show the category's emoji
+        color:
+          type: string
+          nullable: true
+          enum: [slate, violet, purple, pink, rose, sand, lime, teal, cyan, indigo, null]
+          description: IdentityColor or null → use the category's colour
         type:
           $ref: "#/components/schemas/GoalType"
+        start_value:
+          type: number
+          nullable: true
+          description: Numeric goals only. Goals created before goal customisation have 0.
         target_value:
           type: number
           nullable: true
@@ -1065,15 +1370,48 @@ components:
         current_value:
           type: number
           nullable: true
-          description: Numeric goals only; 0 until first check-in
+          description: Numeric goals only; latest check-in value, equals start_value until the first check-in
         unit:
           type: string
           nullable: true
           description: Numeric goals only
+        direction:
+          type: string
+          nullable: true
+          enum: [increase, decrease, null]
+          description: Numeric goals only (NumericDirection). Progress = (current - start) / (target - start), clamped 0..1.
+        frequency_type:
+          type: string
+          nullable: true
+          enum: [daily, per_week, weekdays, null]
+          description: Habit goals only (FrequencyType)
         frequency_per_week:
           type: integer
           nullable: true
-          description: Habit goals only
+          description: >
+            Habit goals: expected check-ins per week (7 for daily, the number
+            of days for weekdays). Also allowed on numeric/milestone goals as
+            the scoring consistency expectation (scoring README
+            Interpretation 2).
+        weekdays:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/Weekday"
+          description: Only when frequency_type = weekdays; sorted ascending, no duplicates
+        why:
+          type: string
+          nullable: true
+          maxLength: 140
+          description: "\"Why this matters\", shown on the check-in screen"
+        check_in_count:
+          type: integer
+          description: Total check-ins on this goal. When > 0 the type is locked (edit screen).
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set when status became archived; null otherwise
         start_date:
           type: string
           format: date
@@ -1099,8 +1437,10 @@ components:
         - id
         - user_id
         - title
+        - category_id
         - category
         - type
+        - check_in_count
         - start_date
         - weight
         - status
@@ -1108,33 +1448,93 @@ components:
 
     GoalCreateRequest:
       type: object
+      description: >
+        Type rules (all → 422 VALIDATION_ERROR, checked again on PATCH against
+        the merged goal):
+        numeric — target_value required; start_value defaults to 0;
+        start_value ≠ target_value; direction defaults to the one implied by
+        start vs target, and if sent must agree with it (target > start ⇔
+        increase); current_value starts at start_value.
+        habit — frequency_type required; per_week needs frequency_per_week;
+        weekdays needs a non-empty weekdays list; for daily/weekdays the
+        server sets frequency_per_week itself (7 / number of days) and
+        ignores any value sent.
+        milestone — deadline required on create.
+        Non-numeric goals must not send start_value/direction; non-habit
+        goals must not send frequency_type/weekdays (frequency_per_week stays
+        allowed as the consistency expectation). start_date ≤ deadline.
+        category_id must be one of the user's categories (422 INVALID_CATEGORY).
       properties:
         title:
           type: string
           minLength: 1
           maxLength: 200
+          description: The goal form limits the name to 60 characters; the API keeps 200 for existing goals.
         description:
           type: string
           maxLength: 2000
           nullable: true
-        category:
-          $ref: "#/components/schemas/Category"
+        category_id:
+          type: string
+          format: uuid
+        emoji:
+          allOf:
+            - $ref: "#/components/schemas/Emoji"
+          nullable: true
+        color:
+          allOf:
+            - $ref: "#/components/schemas/IdentityColor"
+          nullable: true
         type:
           $ref: "#/components/schemas/GoalType"
-        target_value:
+        start_value:
           type: number
-          exclusiveMinimum: 0
+          minimum: 0
           exclusiveMaximum: 10000000000
           nullable: true
+        target_value:
+          type: number
+          minimum: 0
+          exclusiveMaximum: 10000000000
+          nullable: true
+          description: 0 is allowed (a decrease goal like "debt to 0"); still must differ from start_value
         unit:
           type: string
           maxLength: 32
+          nullable: true
+        direction:
+          allOf:
+            - $ref: "#/components/schemas/NumericDirection"
+          nullable: true
+        frequency_type:
+          allOf:
+            - $ref: "#/components/schemas/FrequencyType"
           nullable: true
         frequency_per_week:
           type: integer
           minimum: 1
           maximum: 100
           nullable: true
+          description: The goal form's stepper is 1-7; the API keeps 1-100 so goals created earlier stay editable.
+        weekdays:
+          type: array
+          nullable: true
+          minItems: 1
+          maxItems: 7
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Weekday"
+        why:
+          type: string
+          maxLength: 140
+          nullable: true
+          description: Trimmed; empty → null
+        milestones:
+          type: array
+          maxItems: 50
+          description: Milestone goals only. Starter subtasks created with the goal, in this order (templates, screen 11).
+          items:
+            $ref: "#/components/schemas/MilestoneCreateRequest"
         start_date:
           type: string
           format: date
@@ -1149,10 +1549,11 @@ components:
           exclusiveMinimum: 0
           exclusiveMaximum: 1000
           default: 1
-      required: [title, category, type, start_date]
+      required: [title, category_id, type, start_date]
 
     GoalUpdateRequest:
       type: object
+      description: Same field rules as GoalCreateRequest, validated against the merged goal. Send null to clear a nullable field (emoji/color back to the category's, why, deadline…).
       properties:
         title:
           type: string
@@ -1162,22 +1563,62 @@ components:
           type: string
           maxLength: 2000
           nullable: true
-        category:
-          $ref: "#/components/schemas/Category"
+        category_id:
+          type: string
+          format: uuid
+        emoji:
+          allOf:
+            - $ref: "#/components/schemas/Emoji"
+          nullable: true
+        color:
+          allOf:
+            - $ref: "#/components/schemas/IdentityColor"
+          nullable: true
+        type:
+          $ref: "#/components/schemas/GoalType"
+        start_value:
+          type: number
+          minimum: 0
+          exclusiveMaximum: 10000000000
+          nullable: true
         target_value:
           type: number
-          exclusiveMinimum: 0
+          minimum: 0
           exclusiveMaximum: 10000000000
           nullable: true
         unit:
           type: string
           maxLength: 32
           nullable: true
+        direction:
+          allOf:
+            - $ref: "#/components/schemas/NumericDirection"
+          nullable: true
+        frequency_type:
+          allOf:
+            - $ref: "#/components/schemas/FrequencyType"
+          nullable: true
         frequency_per_week:
           type: integer
           minimum: 1
           maximum: 100
           nullable: true
+        weekdays:
+          type: array
+          nullable: true
+          minItems: 1
+          maxItems: 7
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/Weekday"
+        why:
+          type: string
+          maxLength: 140
+          nullable: true
+        start_date:
+          type: string
+          format: date
+          description: Must be between 1970-01-01 and 2100-12-31 and not after deadline (422 otherwise).
         deadline:
           type: string
           format: date
@@ -1297,9 +1738,10 @@ components:
 
     CategoryScore:
       type: object
+      description: One per user category, in sort_order (every category is listed, even ones with no goals).
       properties:
         category:
-          $ref: "#/components/schemas/Category"
+          $ref: "#/components/schemas/CategoryRef"
         score:
           type: integer
           nullable: true
@@ -1412,20 +1854,25 @@ components:
 
     CategoryWeights:
       type: object
+      description: >
+        GET returns one row per user category in sort_order (weight 1 where
+        none is stored). PUT upserts the rows sent; a category_id that is not
+        one of the user's categories → 422 INVALID_CATEGORY.
       properties:
         weights:
           type: array
           items:
             type: object
             properties:
-              category:
-                $ref: "#/components/schemas/Category"
+              category_id:
+                type: string
+                format: uuid
               weight:
                 type: number
                 exclusiveMinimum: 0
                 exclusiveMaximum: 1000
                 description: Must be greater than 0 and less than 1000 (matches the DB's CHECK (weight > 0) and Numeric(5,2))
-            required: [category, weight]
+            required: [category_id, weight]
       required: [weights]
 
     JournalTag:

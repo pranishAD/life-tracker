@@ -21,6 +21,8 @@ If anything conflicts with `docs/master-plan.md`, the master plan wins until Aay
 | qa-tester | e2e/, docs/test-plan.md, docs/bugs.md | Test plan, Playwright e2e, bug reports |
 | security-reviewer | docs/security-review.md | Security review before merging auth/user-data features and before each deploy. Reports only, never edits code |
 
+**Models:** every subagent runs on `model: sonnet` (set in each `.claude/agents/*.md`), including security-reviewer and product-planner. Only the main session uses Opus, and only manually when Aayush asks. Never override a subagent to Opus on your own.
+
 Design is done OUTSIDE this repo in a separate Claude chat. Approved design output lands in `design/` (tokens.json, tailwind snippet, screenshots). Treat `design/` as read-only input. Never ask a subagent to invent the visual design; if `design/tokens.json` is missing, tell Aayush the frontend is blocked on design.
 
 ## How to run a phase

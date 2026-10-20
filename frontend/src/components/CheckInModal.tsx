@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, Check, ChevronDown, TrendingUp, X } from "lucide-react";
+import { Calendar, Check, ChevronDown, Quote, TrendingUp, X } from "lucide-react";
 import Button from "./Button";
 import ScoreRing from "./ScoreRing";
 import { Textarea } from "./Input";
@@ -118,7 +118,12 @@ export default function CheckInModal({ goalId, onClose }: CheckInModalProps) {
 
         {/* Goal picker: a real <select> overlaid on the styled row so it stays
             a native, accessible control while matching the design visually. */}
-        <div className="relative flex items-center gap-3 bg-surface-2 rounded-md p-3 mb-4 md:mb-5">
+        <div
+          className={clsx(
+            "relative flex items-center gap-3 bg-surface-2 p-3",
+            selectedGoal?.why ? "rounded-t-md" : "rounded-md mb-4 md:mb-5",
+          )}
+        >
           {goalsLoading ? (
             <div className="h-10 w-full bg-surface-3 rounded animate-pulse" />
           ) : selectedGoal ? (
@@ -150,6 +155,17 @@ export default function CheckInModal({ goalId, onClose }: CheckInModalProps) {
             <p className="text-body-sm text-ink-muted">No active goals yet — create one first.</p>
           )}
         </div>
+        {/* "Why this matters" reminder, attached under the picker. Read-only
+            here (edited on the goal); follows the picked goal. */}
+        {selectedGoal?.why && (
+          <div className="flex gap-2 items-start bg-surface-2 border-t border-border rounded-b-md px-3 pt-2.5 pb-3 mb-4 md:mb-5 text-body-sm text-ink">
+            <Quote className="w-4 h-4 text-gold flex-none mt-px" strokeWidth={2} aria-hidden="true" />
+            <div>
+              <b className="block text-label uppercase text-gold mb-0.5">Why this matters</b>
+              {selectedGoal.why}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-4 md:gap-5">
           {selectedGoal?.type === "numeric" && (

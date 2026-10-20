@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.models import CheckIn, Goal, GoalType, Milestone, ScoreSnapshot
 from scoring import (
     CheckIn as SCheckIn,
+    FrequencyType as SFrequencyType,
     Goal as SGoal,
     GoalScore as SGoalScore,
     GoalStatus as SGoalStatus,
@@ -31,6 +32,19 @@ from scoring import (
 
 
 def to_scoring_goal(goal: Goal) -> SGoal:
+    # Goal customisation (scoring README Interpretations 8-10): direction is
+    # never passed (the engine reads it off start vs target), and the habit
+    # schedule only for habits, as the README asks.
+    frequency_type = (
+        SFrequencyType(goal.frequency_type.value)
+        if goal.type == GoalType.HABIT and goal.frequency_type is not None
+        else None
+    )
+    weekdays = (
+        tuple(sorted(goal.weekdays))
+        if frequency_type == SFrequencyType.WEEKDAYS and goal.weekdays
+        else None
+    )
     return SGoal(
         type=SGoalType(goal.type.value),
         status=SGoalStatus(goal.status.value),
@@ -43,6 +57,9 @@ def to_scoring_goal(goal: Goal) -> SGoal:
         ),
         deadline=goal.deadline,
         weight=float(goal.weight),
+        start_value=float(goal.start_value) if goal.start_value is not None else None,
+        frequency_type=frequency_type,
+        weekdays=weekdays,
     )
 
 
@@ -147,15 +164,18 @@ def update_numeric_current_value(db: Session, goal: Goal) -> None:
     """Keep `current_value` as "the latest absolute reading" (see
     app/models/goal.py's docstring): whichever check-in has the most recent
     `logged_for` (ties broken by `created_at`, i.e. whichever was logged
-    last) wins, regardless of insert/delete order. Only meaningful for
-    numeric goals; a no-op otherwise.
+    last) wins, regardless of insert/delete order. With no valued check-ins
+    it is the goal's start_value (0 for a goal without one), i.e. "no
+    progress yet" -- not 0, which on a decrease goal (start 32, target 28)
+    would read as over-achieved. Only meaningful for numeric goals; a no-op
+    otherwise.
     """
     if goal.type != GoalType.NUMERIC:
         return
 
     rows = [c for c in load_check_ins(db, goal.id) if c.value is not None]
     if not rows:
-        goal.current_value = Decimal("0")
+        goal.current_value = goal.start_value if goal.start_value is not None else Decimal("0")
         return
 
     latest = max(rows, key=lambda c: (c.logged_for, c.created_at))

@@ -10,7 +10,7 @@ from decimal import Decimal
 import pytest
 
 from app.config import get_settings
-from app.models import Category, GoalStatus, GoalType
+from app.models import GoalStatus, GoalType
 
 
 @pytest.fixture(autouse=True)
@@ -42,9 +42,9 @@ def test_daily_snapshot_rejects_user_jwt(client, make_user, auth_headers):
 
 def test_daily_snapshot_writes_snapshots_for_active_goals_only(client, make_user, make_goal):
     user = make_user(email="cron2@example.com")
-    make_goal(user_id=user.id, category=Category.FITNESS, type=GoalType.NUMERIC, target_value=Decimal("10"), status=GoalStatus.ACTIVE)
-    make_goal(user_id=user.id, category=Category.STUDY, type=GoalType.NUMERIC, target_value=Decimal("10"), status=GoalStatus.ARCHIVED)
-    make_goal(user_id=user.id, category=Category.CAREER, type=GoalType.NUMERIC, target_value=Decimal("10"), status=GoalStatus.COMPLETED)
+    make_goal(user_id=user.id, category="fitness", type=GoalType.NUMERIC, target_value=Decimal("10"), status=GoalStatus.ACTIVE)
+    make_goal(user_id=user.id, category="study", type=GoalType.NUMERIC, target_value=Decimal("10"), status=GoalStatus.ARCHIVED)
+    make_goal(user_id=user.id, category="career", type=GoalType.NUMERIC, target_value=Decimal("10"), status=GoalStatus.COMPLETED)
 
     resp = client.get(
         "/api/v1/internal/daily-snapshot", headers={"Authorization": "Bearer test-cron-secret"}

@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Annotated
 
-from pydantic import AfterValidator, Field
+from pydantic import AfterValidator, Field, StringConstraints
 
 from app.errors import validation_error
 
@@ -99,3 +99,52 @@ Weight = Annotated[
     AfterValidator(_fits_after_rounding(WEIGHT_LIMIT, positive=True)),
 ]
 FrequencyPerWeek = Annotated[int, Field(ge=1, le=100)]
+# A numeric goal's start/target: 0 is allowed since goal customisation (a
+# "decrease" goal can target 0, and start_value defaults to 0).
+NonNegativeLargeNumber = Annotated[
+    float,
+    Field(ge=0, lt=LARGE_NUMBER_LIMIT, allow_inf_nan=False),
+    AfterValidator(_fits_after_rounding(LARGE_NUMBER_LIMIT, positive=False)),
+]
+
+# --- Goal customisation (api-contract 1.1.0) ---------------------------------
+
+CATEGORY_NAME_MAX_LENGTH = 24  # categories.name String(24)
+EMOJI_MAX_LENGTH = 16  # categories.emoji / goals.emoji String(16)
+WHY_MAX_LENGTH = 140  # goals.why String(140)
+MAX_CATEGORIES_PER_USER = 12
+MAX_STARTER_MILESTONES = 50
+
+
+def _check_emoji(value: str) -> str:
+    """Contract `Emoji`: 1-16 characters (code points -- Python's len) and no
+    whitespace. The frontend picker guarantees a single grapheme; the server
+    only guards the column and obvious garbage."""
+    if not (1 <= len(value) <= EMOJI_MAX_LENGTH):
+        raise ValueError(f"emoji must be 1-{EMOJI_MAX_LENGTH} characters")
+    if any(ch.isspace() for ch in value):
+        raise ValueError("emoji must not contain whitespace")
+    return value
+
+
+Emoji = Annotated[str, AfterValidator(_check_emoji)]
+
+
+def _empty_to_none(value: str | None) -> str | None:
+    return value or None
+
+
+# "Why this matters": trimmed, empty after trimming -> null, <= 140 chars.
+WhyText = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, max_length=WHY_MAX_LENGTH),
+    AfterValidator(_empty_to_none),
+]
+
+# Category name: trimmed, then 1-24 chars (empty after trimming -> 422).
+CategoryName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=CATEGORY_NAME_MAX_LENGTH),
+]
+
+Weekday = Annotated[int, Field(ge=1, le=7)]

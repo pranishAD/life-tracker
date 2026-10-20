@@ -159,10 +159,14 @@ def test_dummy_hash_never_verifies_as_success():
 # --------------------------------------------------------------------------
 
 
+def _fitness_id(client, headers) -> str:
+    cats = client.get("/api/v1/categories", headers=headers).json()
+    return next(c["id"] for c in cats if c["name"] == "Fitness")
+
+
 def _goal_body(**overrides):
     body = {
         "title": "Run",
-        "category": "fitness",
         "type": "numeric",
         "target_value": 100,
         "unit": "km",
@@ -173,7 +177,8 @@ def _goal_body(**overrides):
 
 
 def _create_goal(client, headers, **overrides):
-    return client.post("/api/v1/goals", json=_goal_body(**overrides), headers=headers)
+    body = {"category_id": _fitness_id(client, headers), **_goal_body(**overrides)}
+    return client.post("/api/v1/goals", json=body, headers=headers)
 
 
 def test_goal_create_text_boundaries(client, make_user, auth_headers):
@@ -196,7 +201,10 @@ def test_goal_create_target_value_bounds(client, make_user, auth_headers):
     assert _create_goal(client, h, target_value=0.01).status_code == 201
     _assert_422(_create_goal(client, h, target_value=1e10))
     _assert_422(_create_goal(client, h, target_value=1e20))  # used to be a 500
+    # 0 itself is a valid target since goal customisation (a decrease goal),
+    # but not with the default start_value 0 (start must differ from target).
     _assert_422(_create_goal(client, h, target_value=0))
+    assert _create_goal(client, h, start_value=5, target_value=0).status_code == 201
     _assert_422(_create_goal(client, h, target_value=-5))
     # Would round to 1e10 / 0.00 in Numeric(12,2): rejected, not a 500.
     _assert_422(_create_goal(client, h, target_value=9999999999.999))
@@ -214,7 +222,7 @@ def test_goal_create_weight_bounds(client, make_user, auth_headers):
 
 def test_goal_create_frequency_bounds(client, make_user, auth_headers):
     h = auth_headers(make_user(email="gfreq@example.com").id)
-    habit = {"type": "habit", "target_value": None, "unit": None}
+    habit = {"type": "habit", "frequency_type": "per_week", "target_value": None, "unit": None}
     assert _create_goal(client, h, frequency_per_week=1, **habit).status_code == 201
     assert _create_goal(client, h, frequency_per_week=100, **habit).status_code == 201
     _assert_422(_create_goal(client, h, frequency_per_week=0, **habit))
@@ -224,14 +232,15 @@ def test_goal_create_frequency_bounds(client, make_user, auth_headers):
 @pytest.mark.parametrize("bad", ["NaN", "Infinity", "-Infinity"])
 def test_goal_create_rejects_nan_and_infinity(client, make_user, auth_headers, bad):
     h = auth_headers(make_user(email=f"gnan{bad.lower()}@example.com").id)
+    cid = _fitness_id(client, h)
     raw = (
-        '{"title":"x","category":"fitness","type":"numeric","target_value":%s,'
-        '"start_date":"%s"}' % (bad, TODAY)
+        '{"title":"x","category_id":"%s","type":"numeric","target_value":%s,'
+        '"start_date":"%s"}' % (cid, bad, TODAY)
     )
     _assert_422(_raw_json(client, "POST", "/api/v1/goals", raw, h))
     raw = (
-        '{"title":"x","category":"fitness","type":"numeric","target_value":5,'
-        '"weight":%s,"start_date":"%s"}' % (bad, TODAY)
+        '{"title":"x","category_id":"%s","type":"numeric","target_value":5,'
+        '"weight":%s,"start_date":"%s"}' % (cid, bad, TODAY)
     )
     _assert_422(_raw_json(client, "POST", "/api/v1/goals", raw, h))
 
@@ -378,16 +387,17 @@ def test_check_in_bounds(client, make_user, make_goal, auth_headers):
 def test_category_weight_bounds(client, make_user, auth_headers):
     h = auth_headers(make_user(email="cw@example.com").id)
     url = "/api/v1/settings/category-weights"
+    cid = _fitness_id(client, h)
 
     def put(weight):
-        return client.put(url, json={"weights": [{"category": "fitness", "weight": weight}]}, headers=h)
+        return client.put(url, json={"weights": [{"category_id": cid, "weight": weight}]}, headers=h)
 
     assert put(999.99).status_code == 200
     assert put(0.01).status_code == 200
     _assert_422(put(1000))
     _assert_422(put(0))
     _assert_422(put(1e20))
-    raw = '{"weights": [{"category": "fitness", "weight": NaN}]}'
+    raw = '{"weights": [{"category_id": "%s", "weight": NaN}]}' % cid
     _assert_422(_raw_json(client, "PUT", url, raw, h))
 
 

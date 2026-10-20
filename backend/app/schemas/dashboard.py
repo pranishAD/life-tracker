@@ -8,12 +8,14 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.models import Category
+from app.schemas.categories import CategoryRef
 from app.schemas.scoring import Grade
 
 
 class CategoryScoreOut(BaseModel):
-    category: Category
+    """One per user category, in sort_order (contract CategoryScore)."""
+
+    category: CategoryRef
     score: Optional[int] = None
     has_active_goals: bool
 

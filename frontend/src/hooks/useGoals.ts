@@ -1,15 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as goalsApi from "../api/goals";
+import type { GoalFilters } from "../api/goals";
 import type {
-  Category,
   GoalCreateRequest,
-  GoalStatus,
   GoalUpdateRequest,
   MilestoneCreateRequest,
   MilestoneUpdateRequest,
 } from "../api/types";
 
-export function useGoals(filters?: { category?: Category; status?: GoalStatus }) {
+export function useGoals(filters?: GoalFilters) {
   return useQuery({
     queryKey: ["goals", filters],
     queryFn: () => goalsApi.listGoals(filters),
@@ -32,6 +31,7 @@ export function useCreateGoal() {
   return useMutation({
     mutationFn: (body: GoalCreateRequest) => goalsApi.createGoal(body),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["categories"] }); // goal_count changed
       qc.invalidateQueries({ queryKey: ["goals"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
@@ -42,8 +42,12 @@ export function useUpdateGoal(goalId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: GoalUpdateRequest) => goalsApi.updateGoal(goalId, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["goal", goalId] });
+    onSuccess: (updated) => {
+      // Put the fresh goal straight into the cache so the detail page shows
+      // it immediately, then mark the lists stale.
+      qc.setQueryData(["goal", goalId], updated);
+      qc.invalidateQueries({ queryKey: ["goalScore", goalId] });
+      qc.invalidateQueries({ queryKey: ["categories"] });
       qc.invalidateQueries({ queryKey: ["goals"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
@@ -55,6 +59,7 @@ export function useDeleteGoal() {
   return useMutation({
     mutationFn: (goalId: string) => goalsApi.deleteGoal(goalId),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["categories"] });
       qc.invalidateQueries({ queryKey: ["goals"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     },

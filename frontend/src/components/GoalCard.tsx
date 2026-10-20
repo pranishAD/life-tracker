@@ -1,90 +1,139 @@
 import { Link } from "react-router-dom";
+import CategoryChip from "./CategoryChip";
+import EmojiTile from "./EmojiTile";
 import GradeBadge from "./GradeBadge";
 import ProgressBar from "./ProgressBar";
 import ScoreRing from "./ScoreRing";
 import { useHabitExtras } from "../hooks/useGoalExtras";
 import { useGoalScore } from "../hooks/useScoring";
-import { CATEGORY_ICONS, CATEGORY_LABELS } from "../lib/category";
-import { gradeToKey } from "../lib/grade";
-import { habitProgress, milestoneProgress, numericProgress } from "../lib/progress";
-import { formatShort } from "../lib/date";
-import type { Goal } from "../api/types";
+import { gradeToKey, type GradeKey } from "../lib/grade";
+import { expectedPerWeek, scheduleLabel } from "../lib/frequency";
+import { goalIdentity } from "../lib/identity";
+import { formatNum, habitProgress, milestoneProgress, numericProgress } from "../lib/progress";
+import { formatShort, isPast } from "../lib/date";
+import type { CategoryRef, Goal, IdentityColor } from "../api/types";
 
 /** One goal in the Goals list / dashboard, per design/components.md "GoalCard".
- * The whole card links to the goal's detail page. */
+ * This wrapper fetches the score + habit stats; GoalCardView draws it. */
 export default function GoalCard({ goal }: { goal: Goal }) {
   const { data: score } = useGoalScore(goal.id);
   const { checkInsThisWeek, streakDays } = useHabitExtras(goal);
-  const Icon = CATEGORY_ICONS[goal.category];
   const gradeKey = score ? gradeToKey(score.grade) : "cal";
   const isCal = gradeKey === "cal";
 
-  const { percent, typeMeta } = (() => {
-    if (goal.type === "numeric") {
-      const p = numericProgress(goal);
-      return { percent: p.percent, typeMeta: `Numeric · ${p.metaRight}` };
-    }
+  return (
+    <GoalCardView
+      href={`/goals/${goal.id}`}
+      title={goal.title}
+      category={goal.category}
+      {...goalIdentity(goal)}
+      gradeKey={gradeKey}
+      score={score?.total ?? null}
+      percent={goalPercent(goal, checkInsThisWeek)}
+      typeMeta={goalTypeMeta(goal, checkInsThisWeek)}
+      footer={goalFooterStat(goal, { isCal, checkInsThisWeek, streakDays, pace: score?.pace })}
+    />
+  );
+}
+
+export function goalPercent(goal: Goal, checkInsThisWeek: number): number {
+  if (goal.type === "numeric") return numericProgress(goal).percent;
+  if (goal.type === "milestone") return milestoneProgress(goal).percent;
+  return habitProgress(goal, checkInsThisWeek).percent;
+}
+
+/** "Numeric · 72 / 80 kg", "Habit · 4 / 5 this week", "Milestone · 3 / 8 · due Dec 1". */
+export function goalTypeMeta(goal: Goal, checkInsThisWeek: number): string {
+  if (goal.type === "numeric") {
+    const start = goal.start_value ?? 0;
+    const target = goal.target_value ?? 0;
+    // Before the first check-in show the plan ("32 → 28 min"), after it the
+    // current value against the target.
+    if (goal.check_in_count === 0) return `Numeric · ${formatNum(start)} → ${formatNum(target)} ${goal.unit ?? ""}`.trim();
+    return `Numeric · ${numericProgress(goal).metaRight}`;
+  }
+  if (goal.type === "milestone") {
+    const p = milestoneProgress(goal);
+    const due = goal.deadline ? ` · due ${formatShort(goal.deadline)}` : "";
+    return `Milestone · ${p.done} / ${p.total}${due}`;
+  }
+  if (goal.check_in_count === 0) return `Habit · ${scheduleLabel(goal)}`;
+  return `Habit · ${checkInsThisWeek} / ${expectedPerWeek(goal)} this week`;
+}
+
+export function goalFooterStat(
+  goal: Goal,
+  ctx: { isCal: boolean; checkInsThisWeek: number; streakDays: number; pace?: number },
+): { text: string; warn: boolean } {
+  if (ctx.isCal) {
     if (goal.type === "milestone") {
       const p = milestoneProgress(goal);
-      const due = goal.deadline ? ` · due ${formatShort(goal.deadline)}` : "";
-      return { percent: p.percent, typeMeta: `Milestone · ${p.done} / ${p.total}${due}` };
+      return { text: `${p.done} / ${p.total}`, warn: false };
     }
-    if (isCal) {
-      const daysSince = Math.max(0, Math.round((Date.now() - new Date(goal.start_date).getTime()) / 86400000));
-      return {
-        percent: habitProgress(goal, checkInsThisWeek).percent,
-        typeMeta: `Habit · started ${daysSince <= 1 ? "today" : `${daysSince} days ago`}`,
-      };
-    }
-    const p = habitProgress(goal, checkInsThisWeek);
-    return { percent: p.percent, typeMeta: `Habit · ${checkInsThisWeek} / ${goal.frequency_per_week} this week` };
-  })();
+    if (goal.type === "habit") return { text: `${ctx.checkInsThisWeek} / ${expectedPerWeek(goal)}`, warn: false };
+    return { text: "New goal", warn: false };
+  }
+  if (goal.type === "habit") {
+    return ctx.streakDays > 0 ? { text: `${ctx.streakDays}-day streak`, warn: false } : { text: "No streak yet", warn: false };
+  }
+  if (goal.type === "milestone") {
+    const overdue = goal.milestones.filter((m) => !m.is_done && m.due_date && isPast(m.due_date)).length;
+    if (overdue > 0) return { text: `${overdue} overdue`, warn: true };
+  }
+  const behind = ctx.pace !== undefined ? ctx.pace < 0.9 : false;
+  return { text: behind ? "Behind pace" : "On pace", warn: behind };
+}
 
-  const footerStat = (() => {
-    if (isCal) {
-      if (goal.type === "milestone") {
-        const p = milestoneProgress(goal);
-        return { text: `${p.done} / ${p.total}`, warn: false };
-      }
-      if (goal.type === "habit") return { text: `${checkInsThisWeek} / ${goal.frequency_per_week}`, warn: false };
-      return { text: "New goal", warn: false };
-    }
-    if (goal.type === "habit") {
-      return streakDays > 0
-        ? { text: `${streakDays}-day streak`, warn: false }
-        : { text: "No streak yet", warn: false };
-    }
-    if (goal.type === "milestone") {
-      const overdue = goal.milestones.filter((m) => !m.is_done && m.due_date && m.due_date < goal.start_date).length;
-      if (overdue > 0) return { text: `${overdue} overdue`, warn: true };
-    }
-    const behind = score ? score.pace < 0.9 : false;
-    return { text: behind ? "Behind pace" : "On pace", warn: behind };
-  })();
+interface GoalCardViewProps {
+  title: string;
+  emoji: string;
+  color: IdentityColor;
+  category: Pick<CategoryRef, "name" | "emoji">;
+  gradeKey: GradeKey;
+  score: number | null;
+  percent: number;
+  typeMeta: string;
+  footer: { text: string; warn: boolean };
+  /** Omit for the form preview (not clickable). */
+  href?: string;
+}
 
-  return (
-    <Link
-      to={`/goals/${goal.id}`}
-      className="bg-surface-1 border border-border rounded-lg p-4 md:p-5 block hover:bg-surface-2 hover:border-border-strong transition"
-    >
+/** Pure presentational card: no data fetching, so the goal form can render
+ * a live preview of a goal that doesn't exist yet. The ring, bar and grade
+ * label use the *grade* colour; only the tile uses the identity colour. */
+export function GoalCardView({ title, emoji, color, category, gradeKey, score, percent, typeMeta, footer, href }: GoalCardViewProps) {
+  const body = (
+    <>
       <div className="flex justify-between items-start gap-3">
-        <div className="min-w-0">
-          <span className="text-label uppercase text-ink-muted bg-surface-2 rounded-sm px-2 py-1 inline-flex items-center gap-1">
-            <Icon className="w-4 h-4" strokeWidth={2} />
-            {CATEGORY_LABELS[goal.category]}
-          </span>
-          <h3 className="text-heading-md mt-2 truncate">{goal.title}</h3>
-          <p className="text-body-sm text-ink-muted truncate">{typeMeta}</p>
+        <div className="flex gap-3 items-start min-w-0">
+          <EmojiTile emoji={emoji} color={color} />
+          <div className="min-w-0">
+            <h3 className="text-heading-md mb-1 break-words">{title || "Goal name"}</h3>
+            <div className="flex items-center gap-1.5 flex-wrap text-body-sm text-ink-muted">
+              <CategoryChip category={category} size="sm" />
+              <span>{typeMeta}</span>
+            </div>
+          </div>
         </div>
-        <ScoreRing score={score?.total ?? null} grade={gradeKey} size={64} strokeWidth={6} scoreFontSize={20} />
+        <ScoreRing score={score} grade={gradeKey} size={64} strokeWidth={6} scoreFontSize={20} />
       </div>
       <div className="mt-4">
         <ProgressBar percent={percent} grade={gradeKey} thin />
       </div>
       <div className="flex justify-between items-center mt-3 text-body-sm">
         <GradeBadge grade={gradeKey} size="sm" showLabel />
-        <span className={footerStat.warn ? "text-grade-d" : "text-ink-muted"}>{footerStat.text}</span>
+        <span className={footer.warn ? "text-grade-d" : "text-ink-muted"}>{footer.text}</span>
       </div>
+    </>
+  );
+  const cls = "bg-surface-1 border border-border rounded-lg p-4 md:p-5 block";
+  if (!href) return <div className={cls}>{body}</div>;
+  return (
+    <Link
+      to={href}
+      className={cls + " hover:bg-surface-2 hover:border-border-strong transition focus-visible:shadow-focus focus-visible:outline-none"}
+    >
+      {body}
     </Link>
   );
 }
