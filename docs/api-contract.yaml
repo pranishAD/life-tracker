@@ -7,6 +7,10 @@ info:
     All routes are prefixed /api/v1. Auth is a Bearer JWT on every route
     except /auth/register and /auth/login.
     Maps to user stories in docs/user-stories.md (US-xx, EC-xx).
+    Decimal fields (target_value, check-in value, weights) are stored with 2
+    decimal places, so a value that rounds onto or past a bound (e.g.
+    target_value >= 9999999999.995, or a positive weight below 0.005) is
+    rejected with 422 like any other out-of-range value.
 
 servers:
   - url: /api/v1
@@ -132,6 +136,7 @@ paths:
                 name:
                   type: string
                   minLength: 1
+                  maxLength: 120
               required: [name]
       responses:
         "200":
@@ -480,7 +485,7 @@ paths:
         - name: week_start
           in: query
           required: true
-          description: Monday of the requested week, YYYY-MM-DD
+          description: Monday of the requested week, YYYY-MM-DD. Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           schema:
             type: string
             format: date
@@ -554,14 +559,14 @@ paths:
         - name: from
           in: query
           required: false
-          description: Inclusive start date, compared against created_at in the caller's tz_offset.
+          description: Inclusive start date, compared against created_at in the caller's tz_offset. Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           schema:
             type: string
             format: date
         - name: to
           in: query
           required: false
-          description: Inclusive end date, compared against created_at in the caller's tz_offset. Must be >= from (422 otherwise).
+          description: Inclusive end date, compared against created_at in the caller's tz_offset. Must be >= from (422 otherwise). Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           schema:
             type: string
             format: date
@@ -711,14 +716,14 @@ paths:
           description: >
             Inclusive. Defaults to the date of the user's first entry (or `to`
             if they have none). If `to` is earlier than the first entry, the
-            default is clamped to `to` (no 422).
+            default is clamped to `to` (no 422). Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           schema:
             type: string
             format: date
         - name: to
           in: query
           required: false
-          description: Inclusive. Defaults to today in the caller's tz_offset. Must be >= from (422 otherwise).
+          description: Inclusive. Defaults to today in the caller's tz_offset. Must be >= from (422 otherwise). Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           schema:
             type: string
             format: date
@@ -948,12 +953,15 @@ components:
         name:
           type: string
           minLength: 1
+          maxLength: 120
         email:
           type: string
           format: email
         password:
           type: string
           minLength: 8
+          maxLength: 128
+          description: 8-128 characters and at most 72 bytes when UTF-8 encoded (bcrypt's limit), else 422.
       required: [name, email, password]
 
     LoginRequest:
@@ -964,6 +972,7 @@ components:
           format: email
         password:
           type: string
+          maxLength: 128
       required: [email, password]
 
     AuthResponse:
@@ -1007,9 +1016,11 @@ components:
         title:
           type: string
           minLength: 1
+          maxLength: 200
         due_date:
           type: string
           format: date
+          description: Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           nullable: true
       required: [title]
 
@@ -1019,9 +1030,11 @@ components:
         title:
           type: string
           minLength: 1
+          maxLength: 200
         due_date:
           type: string
           format: date
+          description: Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           nullable: true
         is_done:
           type: boolean
@@ -1099,8 +1112,10 @@ components:
         title:
           type: string
           minLength: 1
+          maxLength: 200
         description:
           type: string
+          maxLength: 2000
           nullable: true
         category:
           $ref: "#/components/schemas/Category"
@@ -1108,22 +1123,31 @@ components:
           $ref: "#/components/schemas/GoalType"
         target_value:
           type: number
+          exclusiveMinimum: 0
+          exclusiveMaximum: 10000000000
           nullable: true
         unit:
           type: string
+          maxLength: 32
           nullable: true
         frequency_per_week:
           type: integer
+          minimum: 1
+          maximum: 100
           nullable: true
         start_date:
           type: string
           format: date
+          description: Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
         deadline:
           type: string
           format: date
+          description: Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           nullable: true
         weight:
           type: number
+          exclusiveMinimum: 0
+          exclusiveMaximum: 1000
           default: 1
       required: [title, category, type, start_date]
 
@@ -1133,26 +1157,36 @@ components:
         title:
           type: string
           minLength: 1
+          maxLength: 200
         description:
           type: string
+          maxLength: 2000
           nullable: true
         category:
           $ref: "#/components/schemas/Category"
         target_value:
           type: number
+          exclusiveMinimum: 0
+          exclusiveMaximum: 10000000000
           nullable: true
         unit:
           type: string
+          maxLength: 32
           nullable: true
         frequency_per_week:
           type: integer
+          minimum: 1
+          maximum: 100
           nullable: true
         deadline:
           type: string
           format: date
+          description: Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
           nullable: true
         weight:
           type: number
+          exclusiveMinimum: 0
+          exclusiveMaximum: 1000
         status:
           $ref: "#/components/schemas/GoalStatus"
       minProperties: 1
@@ -1190,9 +1224,12 @@ components:
       properties:
         value:
           type: number
+          exclusiveMinimum: -10000000000
+          exclusiveMaximum: 10000000000
           nullable: true
         note:
           type: string
+          maxLength: 2000
           nullable: true
         effort_rating:
           type: integer
@@ -1201,6 +1238,7 @@ components:
         logged_for:
           type: string
           format: date
+          description: Must be between 1970-01-01 and 2100-12-31 (422 otherwise).
       required: [effort_rating, logged_for]
 
     GoalScore:
@@ -1385,7 +1423,8 @@ components:
               weight:
                 type: number
                 exclusiveMinimum: 0
-                description: Must be greater than 0 (matches the DB's CHECK (weight > 0))
+                exclusiveMaximum: 1000
+                description: Must be greater than 0 and less than 1000 (matches the DB's CHECK (weight > 0) and Numeric(5,2))
             required: [category, weight]
       required: [weights]
 

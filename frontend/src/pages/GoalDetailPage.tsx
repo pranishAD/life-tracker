@@ -11,12 +11,14 @@ import ProgressBar from "../components/ProgressBar";
 import ScoreRing from "../components/ScoreRing";
 import Skeleton from "../components/Skeleton";
 import { useCheckInModal } from "../context/CheckInModalContext";
+import { useToast } from "../context/ToastContext";
 import { useCheckIns, useDeleteCheckIn } from "../hooks/useCheckIns";
 import { useAddMilestone, useDeleteGoal, useGoal, useUpdateMilestone } from "../hooks/useGoals";
 import { useGoalScore, useGoalScoreHistory } from "../hooks/useScoring";
 import { useHabitExtras } from "../hooks/useGoalExtras";
 import { CATEGORY_ICONS, CATEGORY_LABELS } from "../lib/category";
 import { formatShort, isPast } from "../lib/date";
+import { TEXT_LIMITS } from "../lib/limits";
 import { gradeToKey, scoreToGradeKey, type GradeKey } from "../lib/grade";
 import {
   expectedProgressPercent,
@@ -261,15 +263,21 @@ function ScoreBreakdownCard({ score, isCal }: { score: ReturnType<typeof useGoal
 function MilestonesCard({ goal }: { goal: NonNullable<ReturnType<typeof useGoal>["data"]> }) {
   const updateMilestone = useUpdateMilestone(goal.id);
   const addMilestone = useAddMilestone(goal.id);
+  const { showToast } = useToast();
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const done = goal.milestones.filter((m) => m.is_done).length;
 
   async function handleAdd() {
     if (!title.trim()) return;
-    await addMilestone.mutateAsync({ title });
-    setTitle("");
-    setAdding(false);
+    try {
+      await addMilestone.mutateAsync({ title });
+      setTitle("");
+      setAdding(false);
+    } catch (err) {
+      // e.g. a backend 422 — show its message instead of failing silently.
+      showToast(err instanceof Error ? err.message : "Couldn't add that subtask.");
+    }
   }
 
   return (
@@ -286,6 +294,8 @@ function MilestonesCard({ goal }: { goal: NonNullable<ReturnType<typeof useGoal>
         <div className="flex gap-2 mb-3">
           <input
             placeholder="New subtask"
+            aria-label="New subtask"
+            maxLength={TEXT_LIMITS.milestoneTitle}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}

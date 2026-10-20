@@ -49,7 +49,13 @@ DATABASE_URL = os.environ.get(
 # pool_pre_ping is a no-op with NullPool (every checkout is already a brand
 # new connection, so there's nothing stale to ping) and is dropped to avoid
 # an extra round trip per request.
-engine = create_engine(DATABASE_URL, poolclass=NullPool, future=True)
+#
+# hide_parameters=True (SEC-003): DBAPI errors keep the SQL text in their
+# message but drop the bound values, so a failed INSERT/UPDATE never writes
+# password hashes, emails or journal text into logs via logger.exception().
+engine = create_engine(
+    DATABASE_URL, poolclass=NullPool, future=True, hide_parameters=True
+)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 

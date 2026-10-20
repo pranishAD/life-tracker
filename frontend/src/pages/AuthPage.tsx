@@ -8,6 +8,7 @@ import clsx from "../lib/clsx";
 import { useAuth } from "../context/AuthContext";
 import { ApiError, RATE_LIMITED_MESSAGE } from "../api/client";
 import type { GradeKey } from "../lib/grade";
+import { PASSWORD_MAX_BYTES, PASSWORD_MIN_LENGTH, TEXT_LIMITS, utf8ByteLength } from "../lib/limits";
 
 const SHOWCASE_GRADES: GradeKey[] = ["s", "a", "b", "c", "d"];
 
@@ -32,6 +33,12 @@ export default function AuthPage() {
     e.preventDefault();
     setError(null);
     setIsRateLimited(false);
+    // maxLength stops people typing more than 128 characters, but a few
+    // emoji can still pass 72 bytes (bcrypt's limit), so check that here.
+    if (isRegister && utf8ByteLength(password) > PASSWORD_MAX_BYTES) {
+      setError("That password is too long. Try a shorter one (fewer emoji or special characters).");
+      return;
+    }
     setIsSubmitting(true);
     try {
       if (isRegister) {
@@ -150,7 +157,13 @@ export default function AuthPage() {
             )}
 
             {isRegister && (
-              <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
+              <Input
+                label="Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={TEXT_LIMITS.userName}
+                required
+              />
             )}
             <Input
               label="Email"
@@ -169,7 +182,8 @@ export default function AuthPage() {
               onChange={(e) => setPassword(e.target.value)}
               error={error && !isRateLimited ? " " : undefined}
               help={isRegister ? "At least 8 characters." : undefined}
-              minLength={isRegister ? 8 : undefined}
+              minLength={isRegister ? PASSWORD_MIN_LENGTH : undefined}
+              maxLength={TEXT_LIMITS.password}
               required
             />
             {!isRegister && (

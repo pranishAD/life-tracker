@@ -10,6 +10,7 @@ import { useCreateCheckIn } from "../hooks/useCheckIns";
 import { useGoalScore } from "../hooks/useScoring";
 import { useToast } from "../context/ToastContext";
 import { addDays, todayIso } from "../lib/date";
+import { NUMBER_LIMITS, TEXT_LIMITS } from "../lib/limits";
 
 const EFFORT_LABELS = ["Easy", "Light", "Solid", "Hard", "All out"];
 
@@ -67,6 +68,14 @@ export default function CheckInModal({ goalId, onClose }: CheckInModalProps) {
     if (!effort) {
       setError("Pick an effort rating.");
       return;
+    }
+    // Same range the backend enforces: -1e10 < value < 1e10.
+    if (selectedGoal?.type === "numeric" && value !== "") {
+      const v = Number(value);
+      if (!(Math.abs(v) < NUMBER_LIMITS.checkInValueAbsMaxExclusive)) {
+        setError("That value is too big. Keep it under 10,000,000,000.");
+        return;
+      }
     }
     try {
       await createCheckIn.mutateAsync({
@@ -267,6 +276,7 @@ export default function CheckInModal({ goalId, onClose }: CheckInModalProps) {
             placeholder="What went well? What got in the way?"
             value={note}
             onChange={(e) => setNote(e.target.value)}
+            maxLength={TEXT_LIMITS.checkInNote}
           />
         </div>
 

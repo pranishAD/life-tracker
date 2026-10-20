@@ -10,6 +10,7 @@ import { useToast } from "../context/ToastContext";
 import { useCategoryWeights, useUpdateCategoryWeights } from "../hooks/useSettings";
 import { updateMe } from "../api/auth";
 import { CATEGORIES, CATEGORY_LABELS } from "../lib/category";
+import { NUMBER_LIMITS, TEXT_LIMITS } from "../lib/limits";
 import type { Category } from "../api/types";
 
 /** Settings: category weights (US-18) + profile name (US-19) + logout
@@ -42,8 +43,18 @@ export default function SettingsPage() {
   async function handleSaveWeights(e: FormEvent) {
     e.preventDefault();
     const payload = CATEGORIES.map((c) => ({ category: c, weight: Number(weights[c]) || 1 }));
-    await updateWeights.mutateAsync({ weights: payload });
-    showToast("Category weights saved.");
+    // Same range the backend enforces: greater than 0, less than 1000.
+    if (payload.some((w) => w.weight <= 0 || w.weight >= NUMBER_LIMITS.weightMaxExclusive)) {
+      showToast(`Weights must be more than 0 and less than ${NUMBER_LIMITS.weightMaxExclusive}.`);
+      return;
+    }
+    try {
+      await updateWeights.mutateAsync({ weights: payload });
+      showToast("Category weights saved.");
+    } catch (err) {
+      // e.g. a backend 422 — show its message instead of failing silently.
+      showToast(err instanceof Error ? err.message : "Couldn't save your weights.");
+    }
   }
 
   async function handleSaveName(e: FormEvent) {
@@ -54,6 +65,8 @@ export default function SettingsPage() {
       const updated = await updateMe(name);
       setUser(updated);
       showToast("Profile updated.");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Couldn't update your name.");
     } finally {
       setSavingName(false);
     }
@@ -69,7 +82,13 @@ export default function SettingsPage() {
         <Card>
           <h2 className="text-heading-md mb-4">Profile</h2>
           <form className="flex flex-col gap-4" onSubmit={handleSaveName}>
-            <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} required />
+            <Input
+              label="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={TEXT_LIMITS.userName}
+              required
+            />
             <Input label="Email" value={user?.email ?? ""} disabled className="opacity-60 cursor-not-allowed" />
             <Button type="submit" variant="secondary" disabled={savingName} className="self-start">
               {savingName ? "Saving…" : "Save name"}
@@ -94,6 +113,7 @@ export default function SettingsPage() {
                   <input
                     type="number"
                     min="0.1"
+                    max={NUMBER_LIMITS.weightMaxExclusive - 0.1}
                     step="0.1"
                     value={weights[c]}
                     onChange={(e) => setWeights((w) => ({ ...w, [c]: e.target.value }))}

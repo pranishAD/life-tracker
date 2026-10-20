@@ -9,6 +9,15 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models import Category, GoalStatus, GoalType
+from app.schemas.common import (
+    DESCRIPTION_MAX_LENGTH,
+    TITLE_MAX_LENGTH,
+    UNIT_MAX_LENGTH,
+    BoundedDate,
+    FrequencyPerWeek,
+    PositiveLargeNumber,
+    Weight,
+)
 from app.schemas.milestones import MilestoneOut
 
 
@@ -34,16 +43,16 @@ class GoalOut(BaseModel):
 
 
 class GoalCreateRequest(BaseModel):
-    title: str = Field(min_length=1)
-    description: Optional[str] = None
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
+    description: Optional[str] = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
     category: Category
     type: GoalType
-    target_value: Optional[float] = None
-    unit: Optional[str] = None
-    frequency_per_week: Optional[int] = None
-    start_date: date
-    deadline: Optional[date] = None
-    weight: float = 1.0
+    target_value: Optional[PositiveLargeNumber] = None
+    unit: Optional[str] = Field(default=None, max_length=UNIT_MAX_LENGTH)
+    frequency_per_week: Optional[FrequencyPerWeek] = None
+    start_date: BoundedDate
+    deadline: Optional[BoundedDate] = None
+    weight: Weight = 1.0
 
     @model_validator(mode="after")
     def _validate_type_requirements(self) -> "GoalCreateRequest":
@@ -61,14 +70,14 @@ class GoalCreateRequest(BaseModel):
 
 
 class GoalUpdateRequest(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1)
-    description: Optional[str] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=TITLE_MAX_LENGTH)
+    description: Optional[str] = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
     category: Optional[Category] = None
-    target_value: Optional[float] = None
-    unit: Optional[str] = None
-    frequency_per_week: Optional[int] = None
-    deadline: Optional[date] = None
-    weight: Optional[float] = None
+    target_value: Optional[PositiveLargeNumber] = None
+    unit: Optional[str] = Field(default=None, max_length=UNIT_MAX_LENGTH)
+    frequency_per_week: Optional[FrequencyPerWeek] = None
+    deadline: Optional[BoundedDate] = None
+    weight: Optional[Weight] = None
     status: Optional[GoalStatus] = None
 
     @model_validator(mode="after")

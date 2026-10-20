@@ -8,11 +8,13 @@ import-order headaches.
 
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.errors import register_exception_handlers
+from app.errors import SECURITY_HEADERS, register_exception_handlers
 from app.routers.auth import router as auth_router
 from app.routers.check_ins import router as check_ins_router
 from app.routers.dashboard import router as dashboard_router
@@ -36,7 +38,15 @@ JOURNAL_EXPORT_HEADERS = [
 
 def create_app() -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Life Tracker API")
+    # SEC-010: no interactive docs / schema in production (Vercel sets
+    # VERCEL=1). Locally (docker compose, tests) they stay on.
+    on_vercel = os.environ.get("VERCEL") == "1"
+    app = FastAPI(
+        title="Life Tracker API",
+        docs_url=None if on_vercel else "/docs",
+        redoc_url=None if on_vercel else "/redoc",
+        openapi_url=None if on_vercel else "/openapi.json",
+    )
 
     app.add_middleware(
         CORSMiddleware,
@@ -50,6 +60,17 @@ def create_app() -> FastAPI:
     )
 
     register_exception_handlers(app)
+
+    # SEC-016: security + no-cache headers on every response, including
+    # handled errors and CORS preflights. Registered after CORSMiddleware, so
+    # it wraps it. setdefault never overwrites a header a route already set
+    # (e.g. the export's Content-Disposition / X-Journal-* headers).
+    @app.middleware("http")
+    async def _security_headers(request, call_next):  # noqa: ANN001, ANN202
+        response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
 
     @app.get(f"{API_PREFIX}/health")
     def health() -> dict[str, str]:

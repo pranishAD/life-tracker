@@ -71,6 +71,11 @@ dependencies, so it can take a few minutes. After that:
 - Frontend: http://localhost:5173
 - Postgres: `localhost:5432` (user/password/db: `lifetracker` / `lifetracker` / `life_tracker` — see `.env`)
 
+These ports are published on `127.0.0.1` only (security review SEC-015), so
+other devices on the same Wi-Fi can't reach your dev database. Use
+`localhost` / `127.0.0.1` from your own machine; opening the dev app from
+your phone over the LAN won't work.
+
 Press `Ctrl+C` to stop, or run detached with `docker compose up -d --build`.
 
 ## Common commands
@@ -193,6 +198,8 @@ Quick summary:
    cd backend && DATABASE_URL="<neon-url>" alembic upgrade head
    ```
    (PowerShell: `$env:DATABASE_URL="<neon-url>"; alembic upgrade head`)
+   **Never run the seed script against Neon.** It creates demo accounts with
+   passwords that are public in this repo (SEC-014, see `docs/deploy.md` section 2).
 3. Import the GitHub repo into Vercel as **one** project. The root
    `vercel.json` (Services config) tells Vercel how to build the two
    services — there's no separate `backend/vercel.json` or

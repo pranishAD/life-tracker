@@ -13,6 +13,10 @@ grandparent):
     # or, outside Docker, with backend/ as cwd:
     cd backend && python -m db.seed
 
+Refuses to run against what looks like production (DATABASE_URL contains
+"neon.tech", or VERCEL=1) unless `--force` is passed (SEC-014): the demo
+accounts have passwords published in this repo.
+
 Safe to re-run: it deletes the two seed users (by email) first; ON DELETE
 CASCADE takes their goals/milestones/check-ins/snapshots/category_weights/
 journal_entries with them, then everything is recreated fresh.
@@ -20,6 +24,7 @@ journal_entries with them, then everything is recreated fresh.
 
 from __future__ import annotations
 
+import os
 import random
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -653,7 +658,23 @@ def print_row_counts(session: Session) -> None:
         print(f"{model.__tablename__:<18} {count}")
 
 
+def refuse_if_production(argv: Sequence[str]) -> None:
+    """SEC-014 guard: exit non-zero if the target DB looks like production."""
+    url = os.environ.get("DATABASE_URL", "")
+    looks_prod = "neon.tech" in url.lower() or os.environ.get("VERCEL") == "1"
+    if looks_prod and "--force" not in argv:
+        print(
+            "Refusing to seed: DATABASE_URL looks like production "
+            "(contains 'neon.tech' or VERCEL=1).\n"
+            "The seed creates demo accounts whose passwords are public in this repo.\n"
+            "Re-run with --force only if you are sure this is not production.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+
 def main() -> None:
+    refuse_if_production(sys.argv[1:])
     rng = random.Random(RNG_SEED)
 
     with SessionLocal() as session:

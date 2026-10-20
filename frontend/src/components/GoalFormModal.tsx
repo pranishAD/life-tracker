@@ -6,6 +6,7 @@ import clsx from "../lib/clsx";
 import { CATEGORIES, CATEGORY_LABELS } from "../lib/category";
 import { useCreateGoal, useUpdateGoal } from "../hooks/useGoals";
 import { todayIso } from "../lib/date";
+import { NUMBER_LIMITS, TEXT_LIMITS } from "../lib/limits";
 import type { Category, Goal, GoalType } from "../api/types";
 
 const TYPES: { value: GoalType; label: string; hint: string }[] = [
@@ -48,6 +49,21 @@ export default function GoalFormModal({ onClose, goal, initial }: GoalFormModalP
     if (!title.trim()) {
       setError("Give this goal a title.");
       return;
+    }
+    // Same number ranges the backend enforces (docs/api-contract.yaml).
+    if (type === "numeric" && targetValue !== "") {
+      const t = Number(targetValue);
+      if (!(t > 0 && t < NUMBER_LIMITS.targetValueMaxExclusive)) {
+        setError("Target value must be more than 0 and less than 10,000,000,000.");
+        return;
+      }
+    }
+    if (type === "habit") {
+      const f = Number(frequency);
+      if (!Number.isInteger(f) || f < NUMBER_LIMITS.frequencyMin || f > NUMBER_LIMITS.frequencyMax) {
+        setError(`Times per week must be a whole number from ${NUMBER_LIMITS.frequencyMin} to ${NUMBER_LIMITS.frequencyMax}.`);
+        return;
+      }
     }
     try {
       if (isEdit && goal) {
@@ -95,11 +111,18 @@ export default function GoalFormModal({ onClose, goal, initial }: GoalFormModalP
 
         {error && <div className="bg-grade-d-dim text-grade-d rounded-md px-3 py-2.5 text-body-sm">{error}</div>}
 
-        <Input label="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+        <Input
+          label="Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={TEXT_LIMITS.goalTitle}
+          required
+        />
         <Input
           label="Description (optional)"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
+          maxLength={TEXT_LIMITS.goalDescription}
         />
 
         <div className="flex flex-col gap-2">
@@ -145,8 +168,20 @@ export default function GoalFormModal({ onClose, goal, initial }: GoalFormModalP
 
         {type === "numeric" && (
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Target value" type="number" value={targetValue} onChange={(e) => setTargetValue(e.target.value)} />
-            <Input label="Unit" placeholder="kg, pages…" value={unit} onChange={(e) => setUnit(e.target.value)} />
+            <Input
+              label="Target value"
+              type="number"
+              step="any"
+              value={targetValue}
+              onChange={(e) => setTargetValue(e.target.value)}
+            />
+            <Input
+              label="Unit"
+              placeholder="kg, pages…"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+              maxLength={TEXT_LIMITS.goalUnit}
+            />
           </div>
         )}
 
@@ -154,8 +189,8 @@ export default function GoalFormModal({ onClose, goal, initial }: GoalFormModalP
           <Input
             label="Times per week"
             type="number"
-            min={1}
-            max={14}
+            min={NUMBER_LIMITS.frequencyMin}
+            max={NUMBER_LIMITS.frequencyMax}
             value={frequency}
             onChange={(e) => setFrequency(e.target.value)}
           />

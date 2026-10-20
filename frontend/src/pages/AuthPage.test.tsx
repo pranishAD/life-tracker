@@ -6,6 +6,7 @@ import AuthPage from "./AuthPage";
 import { AuthProvider } from "../context/AuthContext";
 import { ApiError, RATE_LIMITED_MESSAGE } from "../api/client";
 import * as authApi from "../api/auth";
+import { TEXT_LIMITS } from "../lib/limits";
 
 function renderAuthPage(path = "/login") {
   return render(
@@ -100,5 +101,32 @@ describe("AuthPage (login form)", () => {
     renderAuthPage("/login");
     await user.click(screen.getByRole("link", { name: "Create account" }));
     expect(await screen.findByText("At least 8 characters.")).toBeInTheDocument();
+  });
+
+  // SEC-006: inputs carry the same limits as docs/api-contract.yaml.
+  it("caps register name and password length with maxLength from the limits module", () => {
+    renderAuthPage("/register");
+    expect(screen.getByLabelText("Name")).toHaveAttribute("maxLength", String(TEXT_LIMITS.userName));
+    expect(screen.getByLabelText(/^Password/)).toHaveAttribute("maxLength", String(TEXT_LIMITS.password));
+  });
+
+  it("caps the login password at the contract's maxLength", () => {
+    renderAuthPage("/login");
+    expect(screen.getByLabelText("Password")).toHaveAttribute("maxLength", String(TEXT_LIMITS.password));
+  });
+
+  it("blocks a register password over bcrypt's 72-byte limit without calling the API", async () => {
+    const registerSpy = vi.spyOn(authApi, "register");
+    const user = userEvent.setup();
+    renderAuthPage("/register");
+
+    await user.type(screen.getByLabelText("Name"), "Aayush");
+    await user.type(screen.getByLabelText("Email"), "aayush@example.com");
+    // 20 emoji = 40 UTF-16 characters (under 128) but 80 UTF-8 bytes (over 72).
+    await user.type(screen.getByLabelText(/^Password/), "\u{1F600}".repeat(20));
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    expect(await screen.findByText(/That password is too long/)).toBeInTheDocument();
+    expect(registerSpy).not.toHaveBeenCalled();
   });
 });

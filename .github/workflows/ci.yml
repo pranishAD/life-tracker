@@ -41,8 +41,36 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - name: Install backend dependencies
-        run: pip install -r backend/requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
         working-directory: .
+
+      # Dependency audit (security review SEC-011).
+      # The --ignore-vuln flags below are KNOWN, NON-REACHABLE advisories, see
+      # docs/security-review.md SEC-011:
+      #   - starlette 0.46.2 (pinned by fastapi==0.115.*): the app uses no form/
+      #     multipart parsing, UploadFile, StaticFiles, FileResponse, HTTPEndpoint
+      #     or request.url.
+      #       PYSEC-2026-1941 = CVE-2025-54121   PYSEC-2026-1942 = CVE-2025-62727
+      #       PYSEC-2026-161  = CVE-2026-48710   PYSEC-2026-2280 = CVE-2026-48817
+      #       PYSEC-2026-2281 = CVE-2026-48818   PYSEC-2026-248  = CVE-2026-54282
+      #       PYSEC-2026-249  = CVE-2026-54283
+      #   - pytest 8.4.2 (test-only): PYSEC-2026-1845 = CVE-2025-71176
+      # REMOVE the starlette ignores when FastAPI is bumped (and the pytest one
+      # when pytest >= 9.0.3). Any NEW advisory still fails this step.
+      - name: Audit backend dependencies (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit -r backend/requirements.txt \
+            --ignore-vuln PYSEC-2026-1941 \
+            --ignore-vuln PYSEC-2026-1942 \
+            --ignore-vuln PYSEC-2026-161 \
+            --ignore-vuln PYSEC-2026-2280 \
+            --ignore-vuln PYSEC-2026-2281 \
+            --ignore-vuln PYSEC-2026-248 \
+            --ignore-vuln PYSEC-2026-249 \
+            --ignore-vuln PYSEC-2026-1845
 
       - name: Run pytest (skip gracefully if no tests yet)
         working-directory: backend
@@ -75,6 +103,13 @@ jobs:
             echo "No package-lock.json yet — running npm install instead."
             npm install
           fi
+
+      # Dependency audit (security review SEC-011). Only shipped (non-dev)
+      # dependencies, and only fails on high/critical. The 2 moderate
+      # react-router advisories are known and non-reachable (see SEC-011).
+      - name: Audit frontend dependencies (npm audit)
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Run frontend tests (skip gracefully if no tests yet)
         working-directory: frontend

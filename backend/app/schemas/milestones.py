@@ -8,6 +8,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.common import TITLE_MAX_LENGTH, BoundedDate
+
 
 class MilestoneOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -21,11 +23,11 @@ class MilestoneOut(BaseModel):
 
 
 class MilestoneCreateRequest(BaseModel):
-    title: str = Field(min_length=1)
-    due_date: Optional[date] = None
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
+    due_date: Optional[BoundedDate] = None
 
 
 class MilestoneUpdateRequest(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1)
-    due_date: Optional[date] = None
+    title: Optional[str] = Field(default=None, min_length=1, max_length=TITLE_MAX_LENGTH)
+    due_date: Optional[BoundedDate] = None
     is_done: Optional[bool] = None

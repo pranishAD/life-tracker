@@ -62,6 +62,7 @@ def run_migrations_online() -> None:
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        hide_parameters=True,  # SEC-003: never log bound values (e.g. data migrations)
     )
 
     with connectable.connect() as connection:

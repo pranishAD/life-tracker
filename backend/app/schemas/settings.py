@@ -1,25 +1,21 @@
 """Pydantic v2 schemas for the `settings` tag of docs/api-contract.yaml.
 
-Note: api-contract.yaml's CategoryWeights.weights[].weight declares
-`minimum: 0`, but the DB's category_weights.weight column has
-`CHECK (weight > 0)` (see app/models/category_weight.py) -- 0 would be
-accepted by the contract's schema but rejected by the database. We enforce
-`gt=0` here (stricter than the documented `minimum: 0`) so a bad request
-fails with a clean 422 instead of a 500 from the DB constraint. Flagged in
-the handoff note as a "Proposed changes" item rather than silently
-reinterpreting the contract.
+Category weight bounds (> 0 and < 1000, no NaN/Infinity) match the
+contract's CategoryWeights schema, the DB's CHECK (weight > 0) and its
+Numeric(5,2) column -- see app/schemas/common.py `Weight` (SEC-006).
 """
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.models import Category
+from app.schemas.common import Weight
 
 
 class CategoryWeightItem(BaseModel):
     category: Category
-    weight: float = Field(gt=0)
+    weight: Weight
 
 
 class CategoryWeightsOut(BaseModel):

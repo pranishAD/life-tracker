@@ -73,18 +73,44 @@ installed — either a local virtualenv (`pip install -r requirements.txt`) or
 by overriding `DATABASE_URL` inside the `backend` container:
 `docker compose exec -e DATABASE_URL="<neon-url>" backend alembic upgrade head`.
 
-If you want starter data in the deployed database, run the seed script the
-same way (same caution — only run it against a database you're fine
-seeding):
+### Never seed the production (Neon) database (security review SEC-014)
 
-```bash
-# Mac / Linux / Git Bash
-DATABASE_URL="<neon-connection-string>" python -m db.seed
+**Do not run `python -m db.seed` against Neon.** The seed script creates demo
+accounts (`demo@lifetracker.dev`, `priya@lifetracker.dev`) whose passwords are
+published in this repo, so anyone could log into them on the live site. The
+seed is for your local Docker database only.
 
-# Windows PowerShell
-$env:DATABASE_URL="<neon-connection-string>"
-python -m db.seed
+`seed.py` now guards against this: if `DATABASE_URL` contains `neon.tech`
+(or `VERCEL=1` is set) it refuses to run and exits with an error, and it only
+proceeds if you pass `--force`. Don't pass `--force` against production. If
+you want sample data to try the live app, register a normal account through
+the UI instead.
+
+#### Check Neon for demo users (do this once now)
+
+In the Neon dashboard open **SQL Editor** (on your production branch) and run:
+
+```sql
+SELECT email FROM users
+WHERE email ILIKE '%@example.com'
+   OR email ILIKE '%demo%'
+   OR email ILIKE '%@lifetracker.dev';
 ```
+
+(The last line is there because the second seed user,
+`priya@lifetracker.dev`, doesn't match the first two patterns.)
+
+- **No rows:** nothing to do.
+- **Any rows:** these are seed or test accounts with public passwords.
+  Delete them. `ON DELETE CASCADE` also removes their goals, check-ins,
+  milestones, snapshots, category weights and journal entries:
+  ```sql
+  DELETE FROM users WHERE email IN ('demo@lifetracker.dev', 'priya@lifetracker.dev');
+  ```
+  List the exact emails the SELECT returned. Don't run a broad `ILIKE`
+  delete, in case a real user's email happens to contain "demo". If a row
+  is a real person's account, leave it alone and ask them to change their
+  password instead.
 
 ## 3. Create the Vercel project
 
@@ -306,6 +332,93 @@ Expected output: about ten `401`s, then `429`. Afterwards:
 Do the check in "Double-check the two secrets" (section 4): `JWT_SECRET`
 (48+ random chars, different from local) and `CRON_SECRET` set for **both
 Production and Preview**.
+
+### 6c. Security headers (security review SEC-004)
+
+The root [`vercel.json`](../vercel.json) has a top-level `headers` block that
+applies to every path (`/(.*)`), so it should cover both the frontend and the
+`/api/...` backend responses:
+
+| Header | Value / purpose |
+|---|---|
+| `Content-Security-Policy-Report-Only` | The CSP, in **report-only** mode for now (Aayush's decision). The browser logs violations but blocks nothing. |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `DENY`, so the site can't be framed (clickjacking). This is the header that actually stops framing while the CSP is report-only, because browsers ignore `frame-ancestors` in a Report-Only policy. |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains` |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+
+The CSP allows `'self'` plus only the external origins the app loads today:
+- `https://fonts.googleapis.com`: the Google Fonts stylesheet in
+  `frontend/index.html` (`style-src`)
+- `https://fonts.gstatic.com`: the font files that stylesheet pulls in
+  (`font-src`)
+
+Everything else (scripts, images, the manifest, API calls to `/api/v1`) is
+same-origin. There is no `'unsafe-inline'`. If you add a new external
+resource later (an image CDN, analytics, another font), add its origin to
+the right directive first, or it will show up as a violation.
+
+**Not verified yet:** Vercel Services is in beta. It hasn't been confirmed
+that a top-level `headers` block applies to responses from both services.
+The check below is how you confirm it.
+
+#### Verify the headers after deploying
+
+**Mac / Linux / Git Bash:**
+```bash
+curl -sI https://<your-domain>/ | grep -iE "content-security|x-frame|nosniff|referrer|strict-transport"
+curl -sI https://<your-domain>/api/v1/health | grep -iE "content-security|x-frame|nosniff|referrer|strict-transport"
+```
+
+**Windows PowerShell** (use `curl.exe`, not the `curl` alias):
+```powershell
+curl.exe -sI https://<your-domain>/ | Select-String -Pattern "content-security|x-frame|nosniff|referrer|strict-transport"
+curl.exe -sI https://<your-domain>/api/v1/health | Select-String -Pattern "content-security|x-frame|nosniff|referrer|strict-transport"
+```
+
+Both commands should print five lines: `content-security-policy-report-only`,
+`x-frame-options`, `x-content-type-options`, `referrer-policy` and
+`strict-transport-security`. (`permissions-policy` is set too, but the grep
+doesn't look for it.) If the frontend shows them but `/api/v1/health`
+doesn't, or the other way round, the top-level block isn't reaching that
+service. In that case tell devops so they can move the headers into the
+service config or set them in FastAPI.
+
+#### Read Report-Only violations
+
+1. Open the live site in Chrome or Edge, press **F12**, and go to the
+   **Console** tab. Tick **Preserve log** so messages survive page changes.
+2. Use the app normally: log in, open the dashboard (charts), goals, a goal
+   detail page, check in, the weekly review, the journal (including export)
+   and settings. Hard-refresh (Ctrl+Shift+R / Cmd+Shift+R) once too.
+3. Violations look like
+   `[Report Only] Refused to load ... because it violates the following
+   Content Security Policy directive: "..."`. Filter the console by
+   `Report Only` to find them. The **Issues** tab (Chrome) groups them too.
+4. For each one, decide whether it's something the app really needs. If so,
+   add that origin to the matching directive in `vercel.json`. If not, find
+   out why it's being loaded.
+   - Expected noise: on **Preview** deployments the Vercel toolbar
+     (`vercel.live`) can trigger violations. Judge the policy on the
+     **Production** URL. Browser extensions can also cause violations; check
+     in a private window with extensions off.
+
+Leave it on Report-Only for a day or two of normal use.
+
+#### Switch to enforcing (once there are no violations)
+
+In `vercel.json`, change the header **key** only (keep the value the same):
+
+```diff
+- { "key": "Content-Security-Policy-Report-Only", "value": "default-src 'self'; ..." },
++ { "key": "Content-Security-Policy", "value": "default-src 'self'; ..." },
+```
+
+Commit, deploy, run the `curl` check again (it should now show
+`content-security-policy`), and click through the app once more with the
+console open. Real violations now block the resource and say `Refused to
+...` without the `[Report Only]` prefix.
 
 ## Updating env vars later
 

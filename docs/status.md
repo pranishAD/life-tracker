@@ -23,11 +23,15 @@ Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Depl
 | Designer (separate chat) | Done | Tokens, components, and all 6 screens (desktop + mobile) delivered |
 
 ## Security review 1 (branch security/review-1, NOT merged, waiting for Aayush)
-- security-reviewer: full review incl. Journal -> docs/security-review.md. 0 critical / 2 high / 4 medium / 9 low. Local user A vs user B isolation + mass-assignment + auth tests: 37/37 passed (no cross-user data leaks anywhere, journal included)
-- SEC-001 (high, no login/register brute-force protection): Vercel WAF rate-limit rule documented in docs/deploy.md section 6 (dashboard-only, Hobby allows 1 rule: POST /api/v1/auth/* , 10 req / 60 s / IP -> 429) — devops. Frontend shows a friendly "Too many attempts" message on 429 and never logs out on 429; API client now reads non-JSON error bodies safely — frontend-dev. **Rule must be created by Aayush in the Vercel dashboard; not live yet.** Per-account lockout (needs a schema change) pending Aayush decision
-- SEC-002 (high, public default JWT_SECRET fallback): backend refuses to start on Vercel (VERCEL=1) if JWT_SECRET is missing/placeholder/<32 chars; settings errors never echo secrets — backend-dev. deploy.md/.env.example/README say set JWT_SECRET + CRON_SECRET for Production AND Preview — devops
-- Verified by orchestrator: backend 277/277 (15 new), frontend 108/108 (9 new), `npm run build` clean
-- Open: 4 medium + 9 low findings not fixed yet (see docs/security-review.md); finding statuses in the report still say "open" until security-reviewer re-checks after the live WAF rule + env vars are confirmed
+Verdict after re-check (security-reviewer, 2026-10-20): **OK to ship** — 0 critical, 0 high/medium open in code; 16 findings total (SEC-001..016). Full report: docs/security-review.md
+- Isolation: user A vs user B (goals, milestones, check-ins, scores, journal incl. search/stats/export) 37/37 passed, before and after the fixes
+- Highs: SEC-001 brute force (Vercel WAF rule documented in deploy.md 6a + frontend 429 handling; per-account lockout skipped by Aayush), SEC-002 backend refuses weak/missing JWT_SECRET on Vercel
+- Mediums fixed: SEC-003 DB errors no longer log parameters (db-architect), SEC-004 security headers in vercel.json with CSP Report-Only (devops), SEC-005 login timing equalised (register 409 accepted v1 risk), SEC-006 field limits + api-contract.yaml limits (backend-dev, frontend-dev forms match)
+- Lows fixed: SEC-007, 008 (dates 1970..2100 incl. milestone due_date), 010, 012, 014 (seed guard + docs), 015 (compose ports on 127.0.0.1), 016 (no-store/nosniff/referrer headers on every API response), SEC-011 partly (pip upgrade, pip-audit + npm audit in CI)
+- Accepted/deferred: SEC-009 token in localStorage (accepted), SEC-011 FastAPI/react-router/vitest bumps (deferred), SEC-013 account deletion endpoint (API change, needs Aayush)
+- Verified by orchestrator: backend 316/316, frontend 115/115, `npm run build` clean, npm audit --audit-level=high exit 0, API headers present via curl
+- **Aayush to do after deploy**: create the WAF rule (deploy.md 6a) + 12-request check; confirm JWT_SECRET/CRON_SECRET for Production AND Preview; curl header checks (6c), add per-service headers if /api lacks them; run the Neon demo-user SELECT (deploy.md section 2); switch CSP to enforcing after a clean day
+- Note: habit frequency_per_week max in the goal form went 14 -> 100 to match the contract
 
 ## Feature: Journal (approved by Aayush 2026-10-18, Neon migration 0002 applied by Aayush, merged feature/journal → main)
 - journal_entries table + migration 0002 + 8 seeded demo entries — db-architect

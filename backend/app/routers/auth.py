@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.auth.security import create_access_token, hash_password, verify_password
+from app.auth.security import create_access_token, hash_password, verify_password_or_dummy
 from app.deps import get_current_user
 from app.errors import conflict, unauthorized
 from app.models import User
@@ -51,7 +51,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_session)) -> Au
 @router.post("/login", response_model=AuthResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_session)) -> AuthResponse:
     user = _get_user_by_email(db, payload.email)
-    if user is None or not verify_password(payload.password, user.password_hash):
+    # Always runs bcrypt exactly once, even for an unknown email (SEC-005).
+    password_ok = verify_password_or_dummy(
+        payload.password, user.password_hash if user is not None else None
+    )
+    if user is None or not password_ok:
         raise unauthorized("Incorrect email or password.")
 
     token = create_access_token(str(user.id))
