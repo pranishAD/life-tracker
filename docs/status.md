@@ -2,7 +2,7 @@
 
 Updated by the orchestrator after every phase or major task.
 
-Last updated: 2026-10-20
+Last updated: 2026-10-21
 
 ## Current phase: 6. Launch (deploy config approved and merged to main; Aayush doing the real Neon/Vercel setup himself next)
 
@@ -26,6 +26,7 @@ Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Depl
 Per-user categories (4 defaults, max 12, reorder, delete-with-move), goal emoji/colour/start value/direction/habit schedule/why/archive, screens 10-12b. Branched from security/review-1, so **merge security/review-1 first**.
 - Migration 0003_goal_customisation: tested on a copy of seeded dev data (up, down, up again; no data loss, existing scores unchanged). NOT yet run on Neon or the local dev DB.
 - Tests: backend 480 passed (incl. 171 scoring + legacy-score regression), frontend 182 passed, build clean. Not yet checked in a browser against the real backend.
+- E2E: Playwright 10/10 (desktop + 375px), see docs/test-plan.md; 3 open bugs in docs/bugs.md (BUG-001..003, none blocking).
 - Open: scoring Interpretations #8-#10, extra CHECK constraints, frequency_per_week kept instead of times_per_week, Settings Notifications/Data tabs omitted, lint config missing (pre-existing).
 
 ## Security review 1 (branch security/review-1, NOT merged, waiting for Aayush)
