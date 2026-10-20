@@ -21,7 +21,7 @@ If anything conflicts with `docs/master-plan.md`, the master plan wins until Aay
 | qa-tester | e2e/, docs/test-plan.md, docs/bugs.md | Test plan, Playwright e2e, bug reports |
 | security-reviewer | docs/security-review.md | Security review before merging auth/user-data features and before each deploy. Reports only, never edits code |
 
-**Models:** every subagent runs on `model: sonnet` (set in each `.claude/agents/*.md`), including security-reviewer and product-planner. Only the main session uses Opus, and only manually when Aayush asks. Never override a subagent to Opus on your own.
+**Models:** default is `model: sonnet`. `security-reviewer` and `product-planner` are pinned to `model: opus` (planning and security review are the hard-thinking jobs). The main session also uses Opus only for planning, security review or hard bugs, or when Aayush asks. Never override an agent's model on your own.
 
 Design is done OUTSIDE this repo in a separate Claude chat. Approved design output lands in `design/` (tokens.json, tailwind snippet, screenshots). Treat `design/` as read-only input. Never ask a subagent to invent the visual design; if `design/tokens.json` is missing, tell Aayush the frontend is blocked on design.
 
@@ -73,3 +73,13 @@ Requests for other agents:
 | 4 Frontend | full loop works in browser: register → create goal → check-in → score updates → weekly review |
 | 5 QA + polish | test plan covers every acceptance criterion; Playwright core loop passes; no critical bugs |
 | 6 Launch | frontend on Vercel, backend + DB on Render/Railway, live URL works |
+
+## Token budget
+- Read only what the task needs. Agents read their own owned folders plus the specific section of `docs/api-contract.yaml` or the master plan they need, not whole docs.
+- Grep/Glob first, then Read with offset/limit for big files. Never read lockfiles, node_modules, dist, .venv, or full migration history.
+- Don't re-read a file right after editing it.
+- Run only the relevant tests (e.g. `pytest path/to/test -x -q`, `vitest run <file>`), and trim long output with tail/head.
+- Spawn a subagent only for separable work, with a tight prompt that names the exact files. Never spawn one for a quick lookup.
+- Handoff notes: max 15 lines, using the HANDOFF NOTE template above.
+- Don't explore the whole repo. If unsure where something lives, ask.
+- Default model Sonnet. Opus only for planning, security review or hard bugs. `/clear` after every finished task.

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/node_modules/**)",
+      "Read(**/dist/**)",
+      "Read(**/.venv/**)",
+      "Read(**/__pycache__/**)",
+      "Read(**/package-lock.json)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ]
+  }
+}
