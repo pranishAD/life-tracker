@@ -127,15 +127,18 @@ python -m db.seed
 
 Because this is **one** Vercel project now (not two), all env vars are set
 **once**, at the project level: **Project → Settings → Environment
-Variables**, for at least the **Production** environment.
+Variables**. Set them for **both the Production and Preview** environments
+(tick both boxes when adding each variable). Preview deployments (every
+branch / PR push) run the same backend code against real secrets, so a
+missing Preview value is just as bad as a missing Production one.
 
 | Variable | Value | Notes |
 |---|---|---|
 | `DATABASE_URL` | the Neon pooled connection string from step 1, with `postgresql+psycopg2://` | never commit the real value |
-| `JWT_SECRET` | a long random string | generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"` — use a different value than your local `.env` |
+| `JWT_SECRET` | **48+ random characters** (required, Production **and** Preview) | generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Must be a **different** value from your local `.env` — never reuse the local/dev one. The backend refuses to start on Vercel if this is missing, still the dev default (`dev-only-change-me`), or shorter than 32 characters (see "If a deploy crashes at startup" below). |
 | `JWT_EXPIRES_MINUTES` | `60` (or your preference) | matches `.env.example`'s local default |
 | `CORS_ORIGINS` | `http://localhost:5173` (or leave minimal) | production traffic is same-origin and never triggers CORS at all now, so this var has nothing meaningful to do in production — it's kept around for local dev and so the backend's CORS middleware has a harmless, defined value rather than being unset |
-| `CRON_SECRET` | a long random string | generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"` — Vercel sends this back as `Authorization: Bearer <CRON_SECRET>` when it calls the cron endpoint; the endpoint compares it to this value |
+| `CRON_SECRET` | a long random string (required, Production **and** Preview) | generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"` — Vercel sends this back as `Authorization: Bearer <CRON_SECRET>` when it calls the cron endpoint; the endpoint compares it to this value |
 | `VITE_API_URL` | `/api/v1` | **must be a relative path, not an absolute URL**, in production — frontend and backend are same-origin now, so the frontend should call its own domain's `/api/v1`, not hardcode a separate backend domain. This is a Vite **build-time** variable (baked into the static JS bundle), so it must be set before/at build time, not just at runtime. |
 
 Local dev (`docker compose up`) is unaffected by any of this — it keeps
@@ -143,6 +146,41 @@ using `.env` with `VITE_API_URL=http://localhost:8000/api/v1` (absolute,
 since the dev server and backend are genuinely different origins/ports) and
 `CORS_ORIGINS=http://localhost:5173`. See `.env.example` for the full local
 set with comments.
+
+### Double-check the two secrets (security review SEC-002)
+
+After the first deploy, open **Project → Settings → Environment Variables**
+and confirm that `JWT_SECRET` and `CRON_SECRET` both exist and both show
+**Production** and **Preview** in their environment list. If either one
+only shows Production, edit it and tick Preview too, then redeploy.
+
+### If a deploy crashes at startup
+
+If a deployment's function logs (Vercel → Deployments → the deployment →
+Logs / Runtime Logs) show a settings validation error starting with
+`JWT_SECRET is missing`, for example:
+
+```
+JWT_SECRET is missing, a known placeholder, or shorter than 32 characters; refusing to start on Vercel.
+```
+
+(an earlier draft of this check said "JWT_SECRET is missing or too weak for
+production"; it means the same thing), it means exactly this: in the
+environment that deployment belongs to (Production or Preview), `JWT_SECRET`
+is either not set, still the public dev default `dev-only-change-me` or
+another known placeholder, or shorter than 32 characters. The error never
+prints the secret itself. The backend
+crashes on purpose instead of signing tokens with a guessable secret. Fix:
+
+1. Generate a new value:
+   `python -c "import secrets; print(secrets.token_urlsafe(48))"`
+2. Set it as `JWT_SECRET` in **Settings → Environment Variables** for that
+   environment (Production and Preview).
+3. Redeploy (Deployments → … → Redeploy). Env var changes only take effect
+   on a new deployment.
+
+Changing `JWT_SECRET` logs everyone out (existing tokens stop validating).
+That's expected and harmless; people just log in again.
 
 ## 5. Deploy and verify
 
@@ -166,6 +204,108 @@ set with comments.
    project, automatically adds an `Authorization: Bearer <CRON_SECRET>`
    header — the endpoint just compares it against the `CRON_SECRET` env var
    from step 4.
+
+## 6. Security hardening (do this before inviting anyone)
+
+### 6a. Rate-limit login and register (security review SEC-001)
+
+Without this, anyone can try passwords against `/api/v1/auth/login` as fast
+as they like, and spam `/api/v1/auth/register` with junk accounts. An
+in-app, in-memory limiter doesn't work on Vercel (every function instance
+has its own memory), so we use the **Vercel Firewall (WAF)** instead.
+
+Things to know first:
+- Rate limiting is available on the free **Hobby** plan, but Hobby allows
+  only **1 rate-limit rule per project** (and 3 custom rules in total). So
+  we use **one** rule that covers both auth endpoints.
+- This rule lives **only in the Vercel dashboard**. It can't be put in
+  `vercel.json` with our Services/rewrites setup, so it is not in the repo.
+  If you ever recreate the Vercel project, redo these steps.
+- Counters are tracked **per region**, so the limit is "10 per minute per IP
+  per Vercel region". That's fine for us.
+
+The rule:
+
+| Setting | Value |
+|---|---|
+| Condition 1 | **Request Path** · **starts with** · `/api/v1/auth/` |
+| Condition 2 (AND) | **Method** · **equals** · `POST` |
+| Action | **Rate Limit** |
+| Algorithm / window | Fixed window, **60 s** |
+| Limit | **10** requests |
+| Key | **IP** |
+| When exceeded | **429** (the default) |
+
+10 per minute is plenty for a real person (even a few typos), and far too
+slow for a password-guessing script.
+
+Click steps:
+
+1. Open the project in the Vercel dashboard → **Firewall** tab →
+   **Configure**.
+2. Click **+ New Rule**. Name it something like `auth-rate-limit`.
+3. Under **If**, add the first condition: **Request Path** → **starts with**
+   → `/api/v1/auth/`.
+4. Click to add another condition, make sure it's joined with **AND**:
+   **Method** → **equals** → `POST`.
+5. Under **Then**, choose **Rate Limit**.
+6. Set the window to **Fixed window, 60 seconds**, the limit to **10
+   requests**, and the key to **IP**. Leave the action as **429** (default).
+7. Click **Save Rule**.
+8. Click **Review Changes**, check the diff shows just this one new rule,
+   then click **Publish**. (Nothing takes effect until you publish.)
+
+Optional, cautious rollout: in step 6, set the action to **Log** instead of
+429 and leave it for a day. Requests are never blocked in Log mode; you just
+see in the Firewall view how often the rule *would* have fired. If it never
+fires for normal use (it shouldn't), edit the rule, switch the action to
+**429**, then Review Changes → Publish again. Note that while it's in Log mode
+the check below will show `401` every time, not `429`.
+
+#### How to verify the rate limit
+
+This is a light, one-off check, **not a load test**. Run it only against
+your own deployment, using **your own account's email** with a wrong
+password. It sends 12 quick bad-login requests; expect `401` for the first
+~10 and `429` from around the 11th.
+
+**Mac / Linux / Git Bash:**
+```bash
+for i in $(seq 1 12); do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -X POST "https://<your-domain>/api/v1/auth/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"<your-email>","password":"definitely-wrong"}'
+done
+```
+
+**Windows PowerShell:**
+```powershell
+1..12 | ForEach-Object {
+  try {
+    (Invoke-WebRequest -Method Post -UseBasicParsing `
+      -Uri "https://<your-domain>/api/v1/auth/login" `
+      -ContentType "application/json" `
+      -Body '{"email":"<your-email>","password":"definitely-wrong"}').StatusCode
+  } catch { [int]$_.Exception.Response.StatusCode }
+}
+```
+
+Expected output: about ten `401`s, then `429`. Afterwards:
+- You (from that IP) are blocked from logging in until the 60-second window
+  resets. Wait a minute before logging in for real.
+- If you never see a `429`: check the rule is **published** (not just
+  saved), that the action is 429 and not Log, and that the path condition
+  is exactly `/api/v1/auth/` (with the trailing slash, no typo).
+- Because the window is fixed (not sliding), a run that happens to straddle
+  a window boundary may see the `429` a bit later than the 11th request. If
+  so, wait a minute and run it once more.
+
+### 6b. Confirm the secrets (security review SEC-002)
+
+Do the check in "Double-check the two secrets" (section 4): `JWT_SECRET`
+(48+ random chars, different from local) and `CRON_SECRET` set for **both
+Production and Preview**.
 
 ## Updating env vars later
 

@@ -2,7 +2,7 @@
 
 Updated by the orchestrator after every phase or major task.
 
-Last updated: 2026-10-17
+Last updated: 2026-10-20
 
 ## Current phase: 6. Launch (deploy config approved and merged to main; Aayush doing the real Neon/Vercel setup himself next)
 
@@ -21,6 +21,13 @@ Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Depl
 | frontend-dev | Done | Phase 4: all 6 screens + Settings, wired to the live backend. Phase 6: fixed API client to support a relative base URL for same-origin production deploys. 47/47 tests passing, clean build |
 | qa-tester | Waiting | Phase 5 — test-plan.md + Playwright e2e against user-stories.md, once Phase 6 launch is live |
 | Designer (separate chat) | Done | Tokens, components, and all 6 screens (desktop + mobile) delivered |
+
+## Security review 1 (branch security/review-1, NOT merged, waiting for Aayush)
+- security-reviewer: full review incl. Journal -> docs/security-review.md. 0 critical / 2 high / 4 medium / 9 low. Local user A vs user B isolation + mass-assignment + auth tests: 37/37 passed (no cross-user data leaks anywhere, journal included)
+- SEC-001 (high, no login/register brute-force protection): Vercel WAF rate-limit rule documented in docs/deploy.md section 6 (dashboard-only, Hobby allows 1 rule: POST /api/v1/auth/* , 10 req / 60 s / IP -> 429) — devops. Frontend shows a friendly "Too many attempts" message on 429 and never logs out on 429; API client now reads non-JSON error bodies safely — frontend-dev. **Rule must be created by Aayush in the Vercel dashboard; not live yet.** Per-account lockout (needs a schema change) pending Aayush decision
+- SEC-002 (high, public default JWT_SECRET fallback): backend refuses to start on Vercel (VERCEL=1) if JWT_SECRET is missing/placeholder/<32 chars; settings errors never echo secrets — backend-dev. deploy.md/.env.example/README say set JWT_SECRET + CRON_SECRET for Production AND Preview — devops
+- Verified by orchestrator: backend 277/277 (15 new), frontend 108/108 (9 new), `npm run build` clean
+- Open: 4 medium + 9 low findings not fixed yet (see docs/security-review.md); finding statuses in the report still say "open" until security-reviewer re-checks after the live WAF rule + env vars are confirmed
 
 ## Feature: Journal (approved by Aayush 2026-10-18, Neon migration 0002 applied by Aayush, merged feature/journal → main)
 - journal_entries table + migration 0002 + 8 seeded demo entries — db-architect

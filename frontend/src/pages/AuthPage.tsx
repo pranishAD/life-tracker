@@ -6,7 +6,7 @@ import GradeBadge from "../components/GradeBadge";
 import { Input } from "../components/Input";
 import clsx from "../lib/clsx";
 import { useAuth } from "../context/AuthContext";
-import { ApiError } from "../api/client";
+import { ApiError, RATE_LIMITED_MESSAGE } from "../api/client";
 import type { GradeKey } from "../lib/grade";
 
 const SHOWCASE_GRADES: GradeKey[] = ["s", "a", "b", "c", "d"];
@@ -23,11 +23,15 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // True when the error is "slow down" (HTTP 429), not "your input is wrong".
+  // We still show the same error banner, but don't paint the fields red.
+  const [isRateLimited, setIsRateLimited] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setIsRateLimited(false);
     setIsSubmitting(true);
     try {
       if (isRegister) {
@@ -37,7 +41,14 @@ export default function AuthPage() {
       }
       navigate("/dashboard", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      if (err instanceof ApiError && err.status === 429) {
+        // Rate limited (Vercel firewall or backend). The client already gives
+        // a friendly message; fall back to ours just in case.
+        setIsRateLimited(true);
+        setError(err.message || RATE_LIMITED_MESSAGE);
+      } else {
+        setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -147,7 +158,7 @@ export default function AuthPage() {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              error={!isRegister && error ? " " : undefined}
+              error={!isRegister && error && !isRateLimited ? " " : undefined}
               required
             />
             <Input
@@ -156,7 +167,7 @@ export default function AuthPage() {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              error={error ? " " : undefined}
+              error={error && !isRateLimited ? " " : undefined}
               help={isRegister ? "At least 8 characters." : undefined}
               minLength={isRegister ? 8 : undefined}
               required

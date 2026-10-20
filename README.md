@@ -147,7 +147,7 @@ local dev. **Never commit `.env`** — it's gitignored.
 | Variable | Used by | Meaning |
 |---|---|---|
 | `DATABASE_URL` | backend | SQLAlchemy connection string for Postgres. Local dev: the Docker Postgres URL. Production: a Neon pooled connection string with `sslmode=require` — see "Deployment" below. |
-| `JWT_SECRET` | backend | Secret used to sign auth tokens — use a long random value outside local dev |
+| `JWT_SECRET` | backend | Secret used to sign auth tokens. The `.env.example` value is a public dev-only placeholder. On Vercel it must be 32+ random chars (use 48+, different from local) for both Production and Preview, or the backend refuses to start — see `docs/deploy.md`. |
 | `JWT_EXPIRES_MINUTES` | backend | How long an access token stays valid |
 | `CORS_ORIGINS` | backend | Comma-separated list of origins allowed to call the API |
 | `CRON_SECRET` | backend | Production only. Shared secret for the daily score-snapshot cron endpoint — see "Deployment" below. Leave blank locally. |
@@ -198,12 +198,20 @@ Quick summary:
    services — there's no separate `backend/vercel.json` or
    `frontend/vercel.json` anymore, those are gone.
 4. Set every env var **once**, at the project level (Settings → Environment
-   Variables): `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_MINUTES`,
-   `CORS_ORIGINS`, `CRON_SECRET`, and `VITE_API_URL=/api/v1` (a **relative**
-   path in production, since frontend and backend are same-origin — not an
-   absolute URL like in local dev).
+   Variables), for **both Production and Preview**: `DATABASE_URL`,
+   `JWT_SECRET`, `JWT_EXPIRES_MINUTES`, `CORS_ORIGINS`, `CRON_SECRET`, and
+   `VITE_API_URL=/api/v1` (a **relative** path in production, since frontend
+   and backend are same-origin — not an absolute URL like in local dev).
+   `JWT_SECRET` must be 48+ random chars
+   (`python -c "import secrets; print(secrets.token_urlsafe(48))"`), different
+   from your local one. If a deploy crashes at startup with an error starting
+   "JWT_SECRET is missing...", that variable is missing or weak in that
+   environment.
 5. Deploy, then verify `GET https://<your-domain>/api/v1/health` returns
    `{"status":"ok"}` and the frontend loads at `https://<your-domain>/`.
+6. **Before inviting anyone**, add the Vercel Firewall rate-limit rule on
+   `/api/v1/auth/` (dashboard only, not in the repo) — see "Security
+   hardening" in `docs/deploy.md`.
 
 See `docs/deploy.md` for the full walkthrough, including why each piece
 works this way.

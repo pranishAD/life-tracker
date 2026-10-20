@@ -84,16 +84,49 @@ function buildHeaders(hasJsonBody: boolean, skipAuth?: boolean): Record<string, 
   return headers;
 }
 
+// Code + friendly text for HTTP 429. The Vercel firewall rate-limits the
+// auth endpoints (SEC-001) and answers 429 *before* the request reaches our
+// backend, so the body is NOT our {"error": {...}} JSON — it can be empty,
+// HTML or plain text. We never show that raw body to the user.
+export const RATE_LIMITED_CODE = "RATE_LIMITED";
+export const RATE_LIMITED_MESSAGE = "Too many attempts. Please wait a minute and try again.";
+
+/** Read an error body defensively: only trust it if it matches the contract
+ * shape AND code/message are real strings. Anything else (HTML, plain text,
+ * empty body, odd JSON) returns null so we fall back to a safe message. */
+async function readErrorBody(res: Response): Promise<{ code: string; message: string } | null> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await res.text());
+  } catch {
+    return null; // not JSON (empty, HTML, plain text…)
+  }
+  const error = (parsed as ApiErrorBody | null)?.error;
+  if (error && typeof error.code === "string" && typeof error.message === "string") {
+    return { code: error.code, message: error.message };
+  }
+  return null;
+}
+
 /** Turn a non-2xx response into an ApiError (and fire the 401 event). */
 async function throwApiError(res: Response, skipAuth?: boolean): Promise<never> {
-  let errBody: ApiErrorBody | null = null;
-  try {
-    errBody = (await res.json()) as ApiErrorBody;
-  } catch {
-    errBody = null;
+  const body = await readErrorBody(res);
+
+  let code: string;
+  let message: string;
+  if (body) {
+    // Our own backend answered in the contract shape — use its words.
+    ({ code, message } = body);
+  } else if (res.status === 429) {
+    code = RATE_LIMITED_CODE;
+    message = RATE_LIMITED_MESSAGE;
+  } else {
+    code = "UNKNOWN_ERROR";
+    message = `Request failed (${res.status})`;
   }
-  const code = errBody?.error?.code ?? "UNKNOWN_ERROR";
-  const message = errBody?.error?.message ?? `Request failed (${res.status})`;
+
+  // Only 401 means "your session is gone". A 429 (or anything else) must
+  // NOT log the user out.
   if (res.status === 401 && !skipAuth) emitUnauthorized();
   throw new ApiError(res.status, code, message);
 }
