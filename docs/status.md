@@ -2,7 +2,7 @@
 
 Updated by the orchestrator after every phase or major task.
 
-Last updated: 2026-10-17
+Last updated: 2026-10-21
 
 ## Current phase: 6. Launch (deploy config approved and merged to main; Aayush doing the real Neon/Vercel setup himself next)
 
@@ -21,6 +21,25 @@ Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Depl
 | frontend-dev | Done | Phase 4: all 6 screens + Settings, wired to the live backend. Phase 6: fixed API client to support a relative base URL for same-origin production deploys. 47/47 tests passing, clean build |
 | qa-tester | Waiting | Phase 5 — test-plan.md + Playwright e2e against user-stories.md, once Phase 6 launch is live |
 | Designer (separate chat) | Done | Tokens, components, and all 6 screens (desktop + mobile) delivered |
+
+## Goal customisation (branch feature/goal-customisation, NOT merged, waiting for Aayush)
+Per-user categories (4 defaults, max 12, reorder, delete-with-move), goal emoji/colour/start value/direction/habit schedule/why/archive, screens 10-12b. Branched from security/review-1, so **merge security/review-1 first**.
+- Migration 0003_goal_customisation: tested on a copy of seeded dev data (up, down, up again; no data loss, existing scores unchanged). NOT yet run on Neon or the local dev DB.
+- 2026-10-21: Aayush approved the recommendations (docs/decisions.md). BUG-002 and BUG-003 fixed, BUG-001 stays a documented workaround. Still waiting: Aayush runs migration 0003 on Neon, browser click-through, then merge (security/review-1 first). Nothing merged yet.
+- Tests: backend 480 passed (incl. 171 scoring + legacy-score regression), frontend 185 passed, build clean. Not yet checked in a browser against the real backend.
+- E2E: Playwright 10/10 (desktop + 375px), see docs/test-plan.md; 3 open bugs in docs/bugs.md (BUG-001..003, none blocking).
+- Open: scoring Interpretations #8-#10, extra CHECK constraints, frequency_per_week kept instead of times_per_week, Settings Notifications/Data tabs omitted, lint config missing (pre-existing).
+
+## Security review 1 (branch security/review-1, NOT merged, waiting for Aayush)
+Verdict after re-check (security-reviewer, 2026-10-20): **OK to ship** — 0 critical, 0 high/medium open in code; 16 findings total (SEC-001..016). Full report: docs/security-review.md
+- Isolation: user A vs user B (goals, milestones, check-ins, scores, journal incl. search/stats/export) 37/37 passed, before and after the fixes
+- Highs: SEC-001 brute force (Vercel WAF rule documented in deploy.md 6a + frontend 429 handling; per-account lockout skipped by Aayush), SEC-002 backend refuses weak/missing JWT_SECRET on Vercel
+- Mediums fixed: SEC-003 DB errors no longer log parameters (db-architect), SEC-004 security headers in vercel.json with CSP Report-Only (devops), SEC-005 login timing equalised (register 409 accepted v1 risk), SEC-006 field limits + api-contract.yaml limits (backend-dev, frontend-dev forms match)
+- Lows fixed: SEC-007, 008 (dates 1970..2100 incl. milestone due_date), 010, 012, 014 (seed guard + docs), 015 (compose ports on 127.0.0.1), 016 (no-store/nosniff/referrer headers on every API response), SEC-011 partly (pip upgrade, pip-audit + npm audit in CI)
+- Accepted/deferred: SEC-009 token in localStorage (accepted), SEC-011 FastAPI/react-router/vitest bumps (deferred), SEC-013 account deletion endpoint (API change, needs Aayush)
+- Verified by orchestrator: backend 316/316, frontend 115/115, `npm run build` clean, npm audit --audit-level=high exit 0, API headers present via curl
+- **Aayush to do after deploy**: create the WAF rule (deploy.md 6a) + 12-request check; confirm JWT_SECRET/CRON_SECRET for Production AND Preview; curl header checks (6c), add per-service headers if /api lacks them; run the Neon demo-user SELECT (deploy.md section 2); switch CSP to enforcing after a clean day
+- Note: habit frequency_per_week max in the goal form went 14 -> 100 to match the contract
 
 ## Feature: Journal (approved by Aayush 2026-10-18, Neon migration 0002 applied by Aayush, merged feature/journal → main)
 - journal_entries table + migration 0002 + 8 seeded demo entries — db-architect

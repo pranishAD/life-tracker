@@ -1,19 +1,20 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ChevronRight, Flame, Plus } from "lucide-react";
 import Button from "../components/Button";
 import Card from "../components/Card";
 import ChartCard from "../components/ChartCard";
 import ErrorState from "../components/ErrorState";
-import GoalFormModal from "../components/GoalFormModal";
+import CategoryChip from "../components/CategoryChip";
 import GradeBadge from "../components/GradeBadge";
 import ScoreRing from "../components/ScoreRing";
 import Skeleton from "../components/Skeleton";
 import { useCheckInModal } from "../context/CheckInModalContext";
 import { useAuth } from "../context/AuthContext";
+import { useCategories } from "../hooks/useCategories";
 import { useDashboard } from "../hooks/useDashboard";
 import { useGoals } from "../hooks/useGoals";
-import { CATEGORY_ICONS, CATEGORY_LABELS } from "../lib/category";
+import { resolveTemplateCategory, type TemplateCategoryKey } from "../lib/templates";
 import { pointsToNextGrade } from "../lib/dashboardCopy";
 import { formatFullDate, todayIso, daysBetween } from "../lib/date";
 import { gradeToKey, scoreToGradeKey } from "../lib/grade";
@@ -34,8 +35,6 @@ export default function DashboardPage() {
   // per-category breakdown — this is the same {status:"active"} query
   // AppShell already runs for the FAB, so it's free (cached) once mounted.
   const { data: activeGoals } = useGoals({ status: "active" });
-  const [showCreate, setShowCreate] = useState<{ title: string; category: "fitness" | "study" | "career" | "custom"; type: "numeric" | "habit" | "milestone" } | null>(null);
-  const [showPlainCreate, setShowPlainCreate] = useState(false);
 
   return (
     <div>
@@ -65,7 +64,7 @@ export default function DashboardPage() {
         // Calibrating (goals <3 days old are excluded from the rollup, same
         // as archived goals) — that's a *different* case, handled below by
         // the normal layout rendering its own Calibrating treatment.
-        <EmptyDashboard onCreate={() => setShowPlainCreate(true)} onCreateStarter={setShowCreate} />
+        <EmptyDashboard />
       ) : (
         <>
           <div className="grid gap-4 md:gap-5 md:grid-cols-[1.35fr_1fr]">
@@ -127,9 +126,6 @@ export default function DashboardPage() {
           </div>
         </>
       )}
-
-      {showCreate && <GoalFormModal initial={showCreate} onClose={() => setShowCreate(null)} />}
-      {showPlainCreate && <GoalFormModal onClose={() => setShowPlainCreate(false)} />}
     </div>
   );
 }
@@ -216,13 +212,16 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** Categories card: the first 4 categories (in the user's order) that have
+ * active goals, plus an "All categories" link. Categories with no active
+ * goals are hidden (scoring rule EC-10). */
 function CategoriesCard({ dashboard }: { dashboard: NonNullable<ReturnType<typeof useDashboard>["data"]> }) {
   const active = dashboard.category_scores.filter((c) => c.has_active_goals);
   return (
     <Card>
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-label text-ink-muted">Categories</h2>
-        <Link to="/settings" className="text-body-sm text-ink-muted inline-flex items-center gap-1">
+        <Link to="/settings?tab=scoring" className="text-body-sm text-ink-muted inline-flex items-center gap-1">
           Weights <ChevronRight className="w-4 h-4" />
         </Link>
       </div>
@@ -230,16 +229,17 @@ function CategoriesCard({ dashboard }: { dashboard: NonNullable<ReturnType<typeo
         <p className="text-body-sm text-ink-muted">No active goals yet.</p>
       ) : (
         <div className="grid grid-cols-2 gap-2 md:gap-3">
-          {active.map((c) => {
-            const Icon = CATEGORY_ICONS[c.category];
+          {active.slice(0, 4).map((c) => {
             const gradeKey = c.score !== null ? scoreToGradeKey(c.score) : "cal";
             return (
-              <div key={c.category} className="min-w-0 flex items-center gap-2 md:gap-3 bg-surface-2 rounded-md p-2 md:p-3">
+              <div key={c.category.id} className="min-w-0 flex items-center gap-2 md:gap-3 bg-surface-2 rounded-md p-2 md:p-3">
                 <ScoreRing score={c.score} grade={gradeKey} size={52} strokeWidth={5} scoreFontSize={16} />
                 <div className="min-w-0">
-                  <div className="font-semibold text-body-sm md:text-body flex items-center gap-1.5 truncate">
-                    <Icon className="w-4 h-4 text-ink-muted flex-none" />
-                    {CATEGORY_LABELS[c.category]}
+                  <div className="font-semibold text-body-sm md:text-body flex items-center gap-1.5 min-w-0">
+                    <span aria-hidden="true" className="font-emoji text-[14px] leading-none flex-none">
+                      {c.category.emoji}
+                    </span>
+                    <span className="truncate">{c.category.name}</span>
                   </div>
                   <div className={`text-label text-grade-${gradeKey}`}>
                     {gradeKey === "cal" ? "Calibrating" : scoreGradeName(gradeKey)}
@@ -250,6 +250,12 @@ function CategoriesCard({ dashboard }: { dashboard: NonNullable<ReturnType<typeo
           })}
         </div>
       )}
+      <Link
+        to="/settings?tab=categories"
+        className="mt-3 text-body-sm text-ink-muted inline-flex items-center gap-1 hover:text-ink"
+      >
+        All categories <ChevronRight className="w-4 h-4" />
+      </Link>
     </Card>
   );
 }
@@ -317,18 +323,23 @@ function StreakCard({ dashboard }: { dashboard: NonNullable<ReturnType<typeof us
   );
 }
 
-function EmptyDashboard({
-  onCreate,
-  onCreateStarter,
-}: {
-  onCreate: () => void;
-  onCreateStarter: (v: { title: string; category: "fitness" | "study" | "career" | "custom"; type: "numeric" | "habit" | "milestone" }) => void;
-}) {
-  const starters: { title: string; category: "fitness" | "study" | "career" | "custom"; type: "numeric" | "habit" | "milestone"; sub: string }[] = [
-    { title: "Gym 4x per week", category: "fitness", type: "habit", sub: "Habit" },
-    { title: "Finish an assignment", category: "study", type: "milestone", sub: "Milestone with subtasks" },
-    { title: "Hit a number", category: "career", type: "numeric", sub: "Numeric, e.g. 10 applications" },
-  ];
+/** Starter cards on the empty dashboard (02b). Each opens the goal form
+ * prefilled: the first two from templates, "Hit a number" as a blank
+ * numeric goal in Career. */
+const STARTERS: { key: TemplateCategoryKey; title: string; sub: string; to: (categoryId?: string) => string }[] = [
+  { key: "fitness", title: "Gym 4x per week", sub: "Habit", to: () => "/goals/new/details?template=gym-4x-week" },
+  { key: "study", title: "Finish an assignment", sub: "Milestone with subtasks", to: () => "/goals/new/details?template=finish-assignment" },
+  {
+    key: "career",
+    title: "Hit a number",
+    sub: "Numeric, e.g. 10 applications",
+    to: (id) => `/goals/new/details?type=numeric${id ? `&category=${id}` : ""}`,
+  },
+];
+
+function EmptyDashboard() {
+  const navigate = useNavigate();
+  const { data: categories } = useCategories();
   return (
     <>
       <Card grade="cal">
@@ -338,23 +349,22 @@ function EmptyDashboard({
           <p className="text-ink-muted max-w-[420px]">
             Add a goal, log check-ins, and Bihan grades you from S to D. Your first grade shows up after 3 days.
           </p>
-          <Button icon={<Plus className="w-5 h-5" />} onClick={onCreate}>
+          <Button icon={<Plus className="w-5 h-5" />} onClick={() => navigate("/goals/new")}>
             Create your first goal
           </Button>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 w-full max-w-[720px] mt-4 text-left">
-            {starters.map((s) => {
-              const Icon = CATEGORY_ICONS[s.category];
+            {STARTERS.map((s) => {
+              const category = categories ? resolveTemplateCategory(s.key, categories) : undefined;
               return (
-                <button
+                <Link
                   key={s.title}
-                  onClick={() => onCreateStarter(s)}
-                  className="bg-surface-1 border border-border rounded-lg p-4 flex flex-col gap-2 hover:bg-surface-2 hover:border-border-strong transition text-left"
+                  to={s.to(category?.id)}
+                  className="bg-surface-1 border border-border rounded-lg p-4 flex flex-col items-start gap-2 hover:bg-surface-2 hover:border-border-strong transition focus-visible:shadow-focus focus-visible:outline-none"
                 >
-                  <Icon className="w-5 h-5 text-ink-muted" />
-                  <span className="text-label text-ink-muted">{CATEGORY_LABELS[s.category]}</span>
+                  {category && <CategoryChip category={category} />}
                   <b className="text-body font-semibold">{s.title}</b>
                   <span className="text-body-sm text-ink-muted">{s.sub}</span>
-                </button>
+                </Link>
               );
             })}
           </div>

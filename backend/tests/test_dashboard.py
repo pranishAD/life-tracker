@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.models import Category, GoalStatus, GoalType
+from app.models import GoalStatus, GoalType
 
 
 def _aware(d: date):
@@ -37,7 +37,7 @@ def test_dashboard_category_with_no_goals_excluded(client, make_user, make_goal,
     today = date.today()
     make_goal(
         user_id=user.id,
-        category=Category.FITNESS,
+        category="fitness",
         type=GoalType.HABIT,
         target_value=None,
         frequency_per_week=7,
@@ -47,7 +47,7 @@ def test_dashboard_category_with_no_goals_excluded(client, make_user, make_goal,
 
     resp = client.get("/api/v1/dashboard", headers=auth_headers(user.id))
     body = resp.json()
-    by_category = {c["category"]: c for c in body["category_scores"]}
+    by_category = {c["category"]["name"].lower(): c for c in body["category_scores"]}
 
     assert by_category["fitness"]["has_active_goals"] is True
     assert by_category["fitness"]["score"] is not None
@@ -63,7 +63,7 @@ def test_dashboard_rolls_up_multiple_categories(client, make_user, make_goal, au
 
     fitness_goal = make_goal(
         user_id=user.id,
-        category=Category.FITNESS,
+        category="fitness",
         type=GoalType.HABIT,
         target_value=None,
         frequency_per_week=7,
@@ -72,7 +72,7 @@ def test_dashboard_rolls_up_multiple_categories(client, make_user, make_goal, au
     )
     study_goal = make_goal(
         user_id=user.id,
-        category=Category.STUDY,
+        category="study",
         type=GoalType.HABIT,
         target_value=None,
         frequency_per_week=7,
@@ -89,7 +89,7 @@ def test_dashboard_rolls_up_multiple_categories(client, make_user, make_goal, au
 
     resp = client.get("/api/v1/dashboard", headers=headers)
     body = resp.json()
-    by_category = {c["category"]: c for c in body["category_scores"]}
+    by_category = {c["category"]["name"].lower(): c for c in body["category_scores"]}
 
     assert by_category["fitness"]["score"] >= by_category["study"]["score"]
     assert body["overall_score"] is not None
@@ -124,7 +124,7 @@ def test_dashboard_attention_list_flags_low_score_goal(client, make_user, make_g
     # up in the attention list.
     goal = make_goal(
         user_id=user.id,
-        category=Category.CAREER,
+        category="career",
         type=GoalType.HABIT,
         target_value=None,
         frequency_per_week=7,
@@ -152,7 +152,7 @@ def test_dashboard_excludes_calibrating_goal_from_rollup(client, make_user, make
     # Brand new goal (created_at defaults to "now" -> Calibrating).
     calibrating_goal = make_goal(
         user_id=user.id,
-        category=Category.FITNESS,
+        category="fitness",
         type=GoalType.HABIT,
         target_value=None,
         frequency_per_week=7,
@@ -172,7 +172,7 @@ def test_dashboard_excludes_calibrating_goal_from_rollup(client, make_user, make
 
     resp = client.get("/api/v1/dashboard", headers=headers)
     body = resp.json()
-    by_category = {c["category"]: c for c in body["category_scores"]}
+    by_category = {c["category"]["name"].lower(): c for c in body["category_scores"]}
 
     # has_active_goals is still true (it IS an active goal), but it never
     # contributes a numeric score while Calibrating -- same shape as an
@@ -190,7 +190,7 @@ def test_dashboard_excludes_calibrating_goal_from_rollup(client, make_user, make
     # alone, unaffected by the Calibrating one.
     established_goal = make_goal(
         user_id=user.id,
-        category=Category.STUDY,
+        category="study",
         type=GoalType.HABIT,
         target_value=None,
         frequency_per_week=7,
@@ -206,7 +206,7 @@ def test_dashboard_excludes_calibrating_goal_from_rollup(client, make_user, make
 
     resp2 = client.get("/api/v1/dashboard", headers=headers)
     body2 = resp2.json()
-    by_category2 = {c["category"]: c for c in body2["category_scores"]}
+    by_category2 = {c["category"]["name"].lower(): c for c in body2["category_scores"]}
 
     assert by_category2["fitness"]["score"] is None
     assert by_category2["study"]["score"] is not None

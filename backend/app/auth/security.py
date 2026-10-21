@@ -13,6 +13,7 @@ serverless function.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any
 
 import jwt
@@ -32,6 +33,28 @@ def hash_password(raw_password: str) -> str:
 
 def verify_password(raw_password: str, password_hash: str) -> bool:
     return pwd_context.verify(raw_password, password_hash)
+
+
+# SEC-005: login must run bcrypt even when the email is unknown, otherwise
+# the fast "no such user" response reveals which emails have accounts.
+_DUMMY_PASSWORD = "life-tracker-dummy-password-for-login-timing"
+
+
+@lru_cache(maxsize=1)
+def get_dummy_password_hash() -> str:
+    """A bcrypt hash of a fixed dummy password, computed lazily once per
+    process (lazily so importing this module stays cheap on a cold start)."""
+    return hash_password(_DUMMY_PASSWORD)
+
+
+def verify_password_or_dummy(raw_password: str, password_hash: str | None) -> bool:
+    """Verify `raw_password` against `password_hash`, or -- when there is no
+    user (`password_hash is None`) -- against the dummy hash so the request
+    takes the same time, then return False."""
+    if password_hash is None:
+        verify_password(raw_password, get_dummy_password_hash())
+        return False
+    return verify_password(raw_password, password_hash)
 
 
 def create_access_token(subject: str) -> str:

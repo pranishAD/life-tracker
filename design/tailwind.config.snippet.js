@@ -18,17 +18,24 @@
 
 const grades = ['s', 'a', 'b', 'c', 'd', 'cal'];
 
+/* Identity colours (user-picked per goal/category). Tint classes with opacity
+ * (e.g. bg-id-teal/[.22] ring-id-teal/40) must appear as full strings in source,
+ * so keep them in one static map in the app, e.g.:
+ *   const ID_TILE = { teal: 'bg-id-teal/[.22] ring-1 ring-inset ring-id-teal/40', ... }
+ * Solid classes for swatches and dots are safelisted below. */
+const identity = ['slate', 'violet', 'purple', 'pink', 'rose', 'sand', 'lime', 'teal', 'cyan', 'indigo'];
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  safelist: grades.flatMap((g) => [
+  safelist: [...identity.map((c) => `bg-id-${c}`), ...grades.flatMap((g) => [
     `text-grade-${g}`,
     `bg-grade-${g}`,
     `border-grade-${g}`,
     `stroke-grade-${g}`,
     `fill-grade-${g}`,
     ...(g === 'cal' ? [] : [`bg-grade-${g}-dim`, `stroke-grade-${g}-dim`, `fill-grade-${g}-dim`]),
-  ]),
+  ])],
   theme: {
     extend: {
       colors: {
@@ -69,12 +76,25 @@ module.exports = {
           grid: '#23232f',
           line: '#f4f4f7',
         },
+        id: {
+          slate: '#94a3b8',
+          violet: '#a78bfa',
+          purple: '#d08cf5',
+          pink: '#f472b6',
+          rose: '#fb7185',
+          sand: '#d6b98c',
+          lime: '#a3e635',
+          teal: '#2dd4bf',
+          cyan: '#22d3ee',
+          indigo: '#818cf8',
+        },
         overlay: 'rgba(5, 5, 9, 0.72)',
         error: '#ff4d5e',
       },
       fontFamily: {
         display: ['Unbounded', 'Inter', 'system-ui', 'sans-serif'],
         sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+        emoji: ['Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', 'sans-serif'],
       },
       fontSize: {
         // [size, { lineHeight, letterSpacing, fontWeight }]

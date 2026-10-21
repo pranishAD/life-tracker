@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiFetch, ApiError, clearToken, getToken, setToken, UNAUTHORIZED_EVENT } from "./client";
+import {
+  apiFetch,
+  ApiError,
+  clearToken,
+  getToken,
+  RATE_LIMITED_CODE,
+  RATE_LIMITED_MESSAGE,
+  setToken,
+  UNAUTHORIZED_EVENT,
+} from "./client";
 
 describe("token persistence", () => {
   afterEach(() => localStorage.clear());
@@ -87,6 +96,59 @@ describe("apiFetch error handling", () => {
     await expect(apiFetch("/dashboard")).rejects.toThrow("Token expired");
     expect(handler).toHaveBeenCalledOnce();
     window.removeEventListener(UNAUTHORIZED_EVENT, handler);
+  });
+
+  // SEC-001: the Vercel firewall answers 429 before our backend sees the
+  // request, so the body is not our {"error": {...}} JSON.
+  it.each([
+    ["an HTML body", "<html><body><h1>429 Too Many Requests</h1></body></html>"],
+    ["an empty body", null],
+    ["a plain-text body", "Too Many Requests"],
+    ["JSON in a different shape", JSON.stringify({ error: "rate_limited" })],
+  ])("turns a 429 with %s into a friendly RATE_LIMITED error", async (_label, body) => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(body, { status: 429, headers: { "Content-Type": "text/html" } }),
+    );
+    await expect(
+      apiFetch("/auth/login", { method: "POST", body: {}, skipAuth: true }),
+    ).rejects.toMatchObject({
+      status: 429,
+      code: RATE_LIMITED_CODE,
+      message: RATE_LIMITED_MESSAGE,
+    });
+  });
+
+  it("keeps the backend's own message if a 429 does use the contract shape", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(JSON.stringify({ error: { code: "TOO_MANY_ATTEMPTS", message: "Locked for 15 minutes." } }), {
+        status: 429,
+      }),
+    );
+    await expect(apiFetch("/auth/login", { method: "POST", body: {}, skipAuth: true })).rejects.toMatchObject({
+      status: 429,
+      code: "TOO_MANY_ATTEMPTS",
+      message: "Locked for 15 minutes.",
+    });
+  });
+
+  it("does NOT emit the unauthorized (logout) event on a 429, even for authenticated requests", async () => {
+    setToken("valid");
+    vi.mocked(fetch).mockResolvedValue(new Response("", { status: 429 }));
+    const handler = vi.fn();
+    window.addEventListener(UNAUTHORIZED_EVENT, handler);
+    await expect(apiFetch("/dashboard")).rejects.toBeInstanceOf(ApiError);
+    expect(handler).not.toHaveBeenCalled();
+    expect(getToken()).toBe("valid");
+    window.removeEventListener(UNAUTHORIZED_EVENT, handler);
+  });
+
+  it("falls back to a generic message for a non-JSON body on other errors (e.g. 502 HTML)", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response("<html>Bad Gateway</html>", { status: 502 }));
+    await expect(apiFetch("/dashboard")).rejects.toMatchObject({
+      status: 502,
+      code: "UNKNOWN_ERROR",
+      message: "Request failed (502)",
+    });
   });
 
   it("builds a request against an absolute VITE_API_URL (local dev, unchanged)", async () => {

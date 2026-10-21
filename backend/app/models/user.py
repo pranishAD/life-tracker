@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from .category import Category
     from .category_weight import CategoryWeight
     from .goal import Goal
     from .journal_entry import JournalEntry
@@ -29,6 +30,12 @@ class User(TimestampMixin, Base):
 
     goals: Mapped[list["Goal"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
+    categories: Mapped[list["Category"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="(Category.sort_order, Category.created_at)",
     )
     category_weights: Mapped[list["CategoryWeight"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True

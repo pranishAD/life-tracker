@@ -4,6 +4,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import GoalDetailPage from "./pages/GoalDetailPage";
+import GoalFormPage from "./pages/GoalFormPage";
+import GoalTemplatesPage from "./pages/GoalTemplatesPage";
 import GoalsPage from "./pages/GoalsPage";
 import JournalEditorPage from "./pages/JournalEditorPage";
 import JournalPage from "./pages/JournalPage";
@@ -43,6 +45,34 @@ function App() {
         element={
           <ProtectedRoute>
             <JournalEditorPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Create / edit goal are focused pages too (screens 10-11b): no shell.
+          React Router ranks "/goals/new" above "/goals/:goalId", so "new"
+          is never mistaken for a goal id. */}
+      <Route
+        path="/goals/new"
+        element={
+          <ProtectedRoute>
+            <GoalTemplatesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/goals/new/details"
+        element={
+          <ProtectedRoute>
+            <GoalFormPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/goals/:goalId/edit"
+        element={
+          <ProtectedRoute>
+            <GoalFormPage />
           </ProtectedRoute>
         }
       />

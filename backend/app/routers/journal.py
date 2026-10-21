@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.deps import get_current_user
 from app.errors import validation_error
 from app.models import JournalEntry, User
+from app.schemas.common import ensure_dates_in_range
 from app.schemas.journal import (
     JournalEntryCreateRequest,
     JournalEntryOut,
@@ -53,6 +54,7 @@ def list_journal_entries(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> JournalEntryPage:
+    ensure_dates_in_range(from_, to)
     items, total = list_entries(
         db,
         current_user.id,
@@ -110,6 +112,7 @@ def export_journal(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> Response:
+    ensure_dates_in_range(from_, to)
     if from_ is not None and to is not None and to < from_:
         raise validation_error("to must be on or after from.")
 

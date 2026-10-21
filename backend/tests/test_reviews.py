@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from app.models import Category, GoalType
+from app.models import GoalType
 
 
 def _aware(d: date):
@@ -51,7 +51,7 @@ def test_weekly_review_with_enough_history(client, make_user, make_goal, auth_he
 
     goal = make_goal(
         user_id=user.id,
-        category=Category.FITNESS,
+        category="fitness",
         type=GoalType.HABIT,
         target_value=None,
         frequency_per_week=7,
@@ -84,7 +84,7 @@ def test_weekly_review_other_users_data_not_leaked(client, make_user, make_goal,
 
     make_goal(
         user_id=user_a.id,
-        category=Category.FITNESS,
+        category="fitness",
         type=GoalType.HABIT,
         target_value=None,
         frequency_per_week=7,

@@ -118,6 +118,7 @@ os.environ.setdefault("CORS_ORIGINS", "http://localhost:5173")
 
 from app.main import create_app  # noqa: E402
 from app.models import Base, User  # noqa: E402
+from app.services.categories import seed_default_categories  # noqa: E402
 from app.auth.security import hash_password  # noqa: E402
 from db.session import get_session  # noqa: E402
 
@@ -201,6 +202,9 @@ def make_user(db_session: Session):
     ) -> User:
         user = User(name=name, email=email, password_hash=hash_password(password))
         db_session.add(user)
+        db_session.flush()
+        # Same as POST /auth/register: every user has the 4 default categories.
+        seed_default_categories(db_session, user.id)
         db_session.commit()
         db_session.refresh(user)
         return user
@@ -217,13 +221,17 @@ def make_goal(db_session: Session):
     from datetime import date
     from decimal import Decimal
 
-    from app.models import Category, Goal, GoalStatus, GoalType
+    from datetime import datetime, timezone
+
+    from sqlalchemy import select
+
+    from app.models import Category, FrequencyType, Goal, GoalStatus, GoalType, NumericDirection
 
     def _make_goal(
         *,
         user_id: uuid.UUID,
         title: str = "Test goal",
-        category: Category = Category.FITNESS,
+        category: "str | uuid.UUID" = "fitness",
         type: GoalType = GoalType.NUMERIC,
         target_value: "Decimal | None" = Decimal("100"),
         current_value: "Decimal | None" = Decimal("0"),
@@ -234,22 +242,62 @@ def make_goal(db_session: Session):
         weight: Decimal = Decimal("1"),
         status: GoalStatus = GoalStatus.ACTIVE,
         created_at: "object | None" = None,
+        start_value: "Decimal | None" = Decimal("0"),
+        frequency_type: "FrequencyType | None" = None,
+        weekdays: "list[int] | None" = None,
     ) -> Goal:
-        if type == GoalType.HABIT and frequency_per_week is None:
-            frequency_per_week = 5
+        """`category` is a default key ("fitness"/"study"/"career"/"custom")
+        of the user's seeded categories, or a category id. Defaults give a
+        pre-customisation-shaped goal (numeric start 0 / increase, habit
+        per_week), matching what migration 0003 backfills."""
+        if isinstance(category, str):
+            category_id = db_session.scalar(
+                select(Category.id).where(
+                    Category.user_id == user_id, Category.default_key == category
+                )
+            )
+        else:
+            category_id = category
+        assert category_id is not None, f"no category {category!r} for user"
+
+        direction = None
+        if type == GoalType.HABIT:
+            frequency_type = frequency_type or FrequencyType.PER_WEEK
+            if frequency_type == FrequencyType.DAILY:
+                frequency_per_week = 7
+            elif frequency_type == FrequencyType.WEEKDAYS:
+                frequency_per_week = len(weekdays or [])
+            elif frequency_per_week is None:
+                frequency_per_week = 5
+        else:
+            frequency_type = None
+            weekdays = None
         if type != GoalType.NUMERIC:
             target_value = None
             current_value = None
             unit = None
+            start_value = None
+        else:
+            start_value = start_value if start_value is not None else Decimal("0")
+            direction = (
+                NumericDirection.INCREASE
+                if target_value > start_value
+                else NumericDirection.DECREASE
+            )
 
         goal = Goal(
             user_id=user_id,
             title=title,
-            category=category,
+            category_id=category_id,
             type=type,
+            start_value=start_value,
             target_value=target_value,
             current_value=current_value,
             unit=unit,
+            direction=direction,
+            frequency_type=frequency_type,
+            weekdays=weekdays,
+            archived_at=datetime.now(timezone.utc) if status == GoalStatus.ARCHIVED else None,
             frequency_per_week=frequency_per_week,
             start_date=start_date or date.today(),
             deadline=deadline,
@@ -266,6 +314,23 @@ def make_goal(db_session: Session):
         return goal
 
     return _make_goal
+
+
+@pytest.fixture()
+def category_id(db_session: Session):
+    """Factory fixture: id of one of a user's default categories by key."""
+    from sqlalchemy import select
+
+    from app.models import Category
+
+    def _category_id(user_id: uuid.UUID, key: str = "fitness") -> uuid.UUID:
+        cid = db_session.scalar(
+            select(Category.id).where(Category.user_id == user_id, Category.default_key == key)
+        )
+        assert cid is not None
+        return cid
+
+    return _category_id
 
 
 @pytest.fixture()

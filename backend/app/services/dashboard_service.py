@@ -46,7 +46,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Category, CategoryWeight, Goal, GoalStatus, User
+from app.models import CategoryWeight, Goal, GoalStatus, User
+from app.services.categories import ordered_categories
 from app.services.scoring_service import load_check_ins, load_milestones, score_goal_as_of
 from scoring import (
     CategoryScoreInput,
@@ -65,14 +66,14 @@ ATTENTION_LOW_SCORE_THRESHOLD = 50
 ATTENTION_DROP_THRESHOLD = 10
 
 
-def get_category_weights_map(db: Session, user_id: uuid.UUID) -> dict[Category, float]:
-    """Equal (1.0) weight per category by default; overridden per-row by
-    anything the user has saved in category_weights (US-18).
-    """
-    weights: dict[Category, float] = {c: 1.0 for c in Category}
+def get_category_weights_map(db: Session, user_id: uuid.UUID) -> dict[uuid.UUID, float]:
+    """Weight per user category id, in sort_order: 1.0 by default, overridden
+    by anything the user has saved in category_weights (US-18)."""
+    weights: dict[uuid.UUID, float] = {c.id: 1.0 for c in ordered_categories(db, user_id)}
     rows = db.scalars(select(CategoryWeight).where(CategoryWeight.user_id == user_id)).all()
     for row in rows:
-        weights[row.category] = float(row.weight)
+        if row.category_id in weights:
+            weights[row.category_id] = float(row.weight)
     return weights
 
 
@@ -112,18 +113,20 @@ def overall_score_as_of(db: Session, user_id: uuid.UUID, as_of: date) -> Optiona
     goals = load_scorable_goals(db, user_id, as_of)
     weights_map = get_category_weights_map(db, user_id)
 
-    by_category: dict[Category, list[WeightedScore]] = {c: [] for c in Category}
+    by_category: dict[uuid.UUID, list[WeightedScore]] = {c: [] for c in weights_map}
     for g in goals:
         total = goal_rollup_total_as_of(db, g, as_of)
         if total is None:
             continue
-        by_category[g.category].append(WeightedScore(score=total, weight=float(g.weight)))
+        by_category.setdefault(g.category_id, []).append(
+            WeightedScore(score=total, weight=float(g.weight))
+        )
 
     category_inputs = [
         CategoryScoreInput(
-            category=c.value, score=category_score(by_category[c]), weight=weights_map[c]
+            category=str(c), score=category_score(scores), weight=weights_map.get(c, 1.0)
         )
-        for c in Category
+        for c, scores in by_category.items()
     ]
     return overall_score(category_inputs)
 
@@ -141,10 +144,11 @@ class DashboardData:
 
 def build_dashboard(db: Session, user: User, trend_days: int, today: date) -> DashboardData:
     goals = load_scorable_goals(db, user.id, today)
+    categories = ordered_categories(db, user.id)
     weights_map = get_category_weights_map(db, user.id)
 
-    by_category: dict[Category, list[WeightedScore]] = {c: [] for c in Category}
-    has_active_by_category: dict[Category, bool] = {c: False for c in Category}
+    by_category: dict[uuid.UUID, list[WeightedScore]] = {c.id: [] for c in categories}
+    has_active_by_category: dict[uuid.UUID, bool] = {c.id: False for c in categories}
     goal_totals: dict[uuid.UUID, int] = {}
     goal_grades: dict[uuid.UUID, str] = {}
     all_check_in_days: set[date] = set()
@@ -156,22 +160,29 @@ def build_dashboard(db: Session, user: User, trend_days: int, today: date) -> Da
         goal_totals[g.id] = result.total
         goal_grades[g.id] = result.grade
         if result.grade != "Calibrating":
-            by_category[g.category].append(
+            by_category.setdefault(g.category_id, []).append(
                 WeightedScore(score=result.total, weight=float(g.weight))
             )
         if g.status == GoalStatus.ACTIVE:
-            has_active_by_category[g.category] = True
+            has_active_by_category[g.category_id] = True
         all_check_in_days.update(c.logged_for for c in check_ins)
 
+    # Every user category, in sort_order, even ones with no goals (contract
+    # CategoryScore).
     category_scores = []
     category_inputs = []
-    for c in Category:
-        scores = by_category[c]
-        cat_score = category_score(scores)
+    for c in categories:
+        cat_score = category_score(by_category[c.id])
         category_scores.append(
-            {"category": c, "score": cat_score, "has_active_goals": has_active_by_category[c]}
+            {
+                "category": c,
+                "score": cat_score,
+                "has_active_goals": has_active_by_category[c.id],
+            }
         )
-        category_inputs.append(CategoryScoreInput(category=c.value, score=cat_score, weight=weights_map[c]))
+        category_inputs.append(
+            CategoryScoreInput(category=str(c.id), score=cat_score, weight=weights_map[c.id])
+        )
 
     overall = overall_score(category_inputs)
     overall_grade_letter = "Calibrating" if overall is None else grade(overall).letter

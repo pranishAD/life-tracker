@@ -13,6 +13,7 @@ thread, no in-process scheduler (docs/master-plan.md section 3).
 
 from __future__ import annotations
 
+import secrets
 from datetime import date
 
 from fastapi import APIRouter, Depends, Header
@@ -30,7 +31,12 @@ router = APIRouter(tags=["internal"])
 
 def verify_cron_secret(authorization: str | None = Header(default=None)) -> None:
     settings = get_settings()
-    if not settings.cron_secret or authorization != f"Bearer {settings.cron_secret}":
+    # Fail closed when CRON_SECRET is empty; constant-time compare (SEC-007).
+    if not settings.cron_secret:
+        raise unauthorized("Missing or wrong CRON_SECRET.")
+    expected = f"Bearer {settings.cron_secret}".encode("utf-8")
+    provided = (authorization or "").encode("utf-8")
+    if not secrets.compare_digest(provided, expected):
         raise unauthorized("Missing or wrong CRON_SECRET.")
 
 

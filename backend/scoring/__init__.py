@@ -16,10 +16,12 @@ from .formulas import (
     is_scorable_status,
     momentum,
     pace,
+    scheduled_weekdays,
 )
 from .types import (
     CategoryScoreInput,
     CheckIn,
+    FrequencyType,
     Goal,
     GoalScore,
     GoalStatus,
@@ -44,12 +46,14 @@ __all__ = [
     "grade",
     "is_calibrating",
     "is_scorable_status",
+    "scheduled_weekdays",
     "current_streak",
     "best_streak",
     # types
     "Goal",
     "GoalType",
     "GoalStatus",
+    "FrequencyType",
     "CheckIn",
     "Milestone",
     "ScoreBreakdown",

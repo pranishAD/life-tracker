@@ -7,11 +7,13 @@ Live reference (all components rendered): the "Bihan" design system page in clau
 
 - v1 is dark only. Body: `bg-bg text-ink font-sans antialiased`.
 - **Grade colours are reserved.** `grade-s` … `grade-d` only appear on things that carry that grade: rings, badges, progress fills, chart lines, grade labels. Never on category tags or decoration.
+- **Identity colours are separate.** Each goal and category has a user-picked colour from 10 `id-*` colours. It only tints the EmojiTile, CategoryChip, dots and swatches. It never colours a ring, progress bar, chart or text. A teal goal that's Slipping still has an orange ring.
 - **Only S glows.** `shadow-glow-s` is used on the S badge and S ring and nowhere else.
 - `grade-d` is also the error/destructive colour. There is no other red.
 - Grade from score: 90-100 S "Locked In", 75-89 A "Strong", 60-74 B "On Track", 40-59 C "Slipping", 0-39 D "Off Track". Goals under 3 days old are "Calibrating" (grey, no grade).
 - The grade letter always sits next to its colour, so colour is never the only signal.
-- Icons: Lucide, 2px stroke, 20px default / 16px inline, `text-ink-muted` or `text-ink`. Fitness = `dumbbell`, Study = `book-open`, Career = `briefcase`, Custom = `sparkles`. No emoji in the UI.
+- Icons: Lucide, 2px stroke, 20px default / 16px inline, `text-ink-muted` or `text-ink`, for all app chrome (nav, buttons, actions, empty states).
+- **Emoji are user content only:** the emoji a user picked for a goal or category, shown in an EmojiTile or CategoryChip (`font-emoji`). Never in labels, buttons or system copy. Default categories: Fitness 🏃 teal, Study 📚 violet, Career 💼 indigo, Custom ✨ slate.
 - Focus: every interactive element gets `focus-visible:shadow-focus focus-visible:outline-none`.
 - Suggested component API: pass `grade: 'S' | 'A' | 'B' | 'C' | 'D' | 'CAL'` and derive classes from it.
 
@@ -100,11 +102,29 @@ Card with header (label + current value + delta), range toggle, and a Recharts a
 
 One goal in the Goals list and the dashboard "needs attention" list. The whole card links to Goal detail.
 
-- Layout: top row = category chip + title + meta (left), sm ScoreRing (right). Then thin ProgressBar. Bottom row = grade label (left), one stat (right).
-- Chip: `text-label uppercase text-ink-muted bg-surface-2 rounded-sm px-2 py-1`.
-- Title `text-heading-md`, meta `text-body-sm text-ink-muted` ("Numeric · 72 / 80 kg", "Milestone · 3 / 8 · due Oct 24", "Habit · started 2 days ago").
+- Layout (updated for goal identity): top row = EmojiTile (40px, goal's emoji + identity colour) + title (`text-heading-md`) with a meta line under it (CategoryChip small + "Numeric · 72 / 80 kg") on the left, sm ScoreRing on the right. Then thin ProgressBar. Bottom row = small GradeBadge with label (left), one stat (right).
+- The ring, bar and grade label use the **grade** colour; only the tile and chip use the identity colour.
 - Stat: habits = "12-day streak", behind pace = "Behind pace", milestones = subtasks done.
 - Padding `p-5`, width fills its grid cell (3 columns desktop, 1 column mobile).
+
+## EmojiTile, CategoryChip, ColourSwatches, EmojiPicker (goal identity)
+
+- **EmojiTile:** square, emoji centred (`font-emoji`). Sizes sm 28px / `rounded-sm` / 15px emoji, md 40px / `rounded-md` / 22px (goal cards), lg 64px / `rounded-lg` / 34px (form; 56px on mobile). Tint = identity colour at 22% + 1px inset ring at 40% (Tailwind: `bg-id-teal/[.22] ring-1 ring-inset ring-id-teal/40`). In the form it's a button with a 22px pencil badge bottom-right (`bg-surface-3`, 2px `surface-1` border).
+- **CategoryChip:** `rounded-full bg-surface-2 text-body-sm font-medium text-ink-muted pl-1.5 pr-2.5 py-0.5`, emoji 13px + name. Selected (pickers, filters): `bg-ink text-bg`. Add variant: dashed `border-border-strong`, transparent, "+ New category".
+- **ColourSwatches:** 10 identity colours in `grid-cols-10 gap-2`, each a circle up to 32px. Selected: 2px `surface-1` gap + 2px `ink` ring and a check icon in `text-bg`. `aria-pressed`.
+- **EmojiPicker:** search field (40px, `bg-surface-2`) + scrolling sections ("Suggested for <goal>", Activity, Objects, Food, Nature, Symbols…) of 8-column grids, 22px emoji, selected = `bg-grade-s-dim` + 1.5px gold inset ring. Use a library for the data and search (e.g. emoji-mart) and style it to this. "Suggested" = a few emoji matched to keywords in the goal name. Recent picks first.
+- **Picker container:** desktop = popover 360px under the tile (`bg-surface-1 border-border-strong rounded-lg shadow-modal p-4`), holding Colour swatches → search → emoji sections (max 232px scroll). Mobile = bottom sheet with grab handle over a scrim. Picking an emoji doesn't close it; tapping outside or Done does.
+
+## SegmentedControl, Stepper, WeekdayPicker (frequency)
+
+- **SegmentedControl:** `grid auto-cols-fr grid-flow-col bg-surface-2 rounded-md p-[3px] gap-0.5`; segments `py-2 px-2.5 rounded-[9px] text-body-sm font-medium text-ink-muted`; selected `bg-surface-3 text-ink shadow-sm`. On a `surface-2` block, the track switches to `bg-surface-1`. Used for goal type, numeric direction and habit frequency. Disabled: 55% opacity + a lock note under it.
+- **Stepper:** `bg-surface-2 border border-border-strong rounded-md`, 44×44 −/+ buttons, value in Unbounded 20px. Range 1-7 for times a week; buttons disable at the ends.
+- **WeekdayPicker:** `grid-cols-7 gap-1.5`, 44px tall buttons M T W T F S S (`aria-label` = full day name), selected `bg-gold text-ink-on-gold`, unselected `bg-surface-2 text-ink-muted`. Weeks start Monday. At least one day stays selected. Summary line under it in `text-body-sm text-ink`: "5 days a week · Mon, Tue, Thu, Fri, Sat".
+
+## Disclosure ("More options")
+
+- Full-width button, `border-t border-border py-4`, "More options" `text-body font-semibold` + muted summary "· Why this matters, start date", chevron right that rotates 180° when open. `aria-expanded`. Content appears below with `gap-5`.
+- Starts collapsed on create. On edit it opens automatically if anything inside has a value.
 
 ## Toggle
 
@@ -169,7 +189,7 @@ Breakpoint: **mobile < 768px**, desktop ≥ 768px (Tailwind `md:`). Build mobile
 
 ### 2b. Dashboard empty state (`02b-dashboard-empty`, new user, zero goals)
 
-- Hero card replaced by a centred empty card: a Calibrating ring (168px, dashed, "–") → "Your score starts with your first goal" (`text-heading-lg`) → a short explanation → primary "Create your first goal" → 3 starter cards (Fitness: Gym 4x per week · Habit; Study: Finish an assignment · Milestone; Career: Hit a number · Numeric). Clicking a starter opens the create-goal form prefilled.
+- Hero card replaced by a centred empty card: a Calibrating ring (168px, dashed, "–") → "Your score starts with your first goal" (`text-heading-lg`) → a short explanation → primary "Create your first goal" → 3 starter cards (Fitness: Gym 4x per week · Habit; Study: Finish an assignment · Milestone; Career: Hit a number · Numeric). Clicking a starter opens the create-goal form (screen 11) prefilled from that template.
 - Row 2: a trend card with a dashed placeholder ("Your trend line appears after 3 days of check-ins.") and a "How grades work" card listing S-D with labels and ranges.
 - No FAB. Starters stack to one column on mobile.
 
@@ -177,7 +197,7 @@ Breakpoint: **mobile < 768px**, desktop ≥ 768px (Tailwind `md:`). Build mobile
 
 - Header: eyebrow "7 active goals", title "Goals", buttons "Sort: Score" (secondary) + "New goal" (primary).
 - **Filters row:** category pills left (All, Fitness, Study, Career, Custom, each with a count; active pill = `bg-ink text-bg`, others outlined `border-border`, `rounded-full`), status segmented control right (Active | Completed | Archived; active segment `bg-surface-3`).
-- **Grid:** GoalCards, `grid-cols-3 gap-5` desktop, 1 column mobile. Card = category chip with icon → title → type meta → sm ScoreRing top-right → thin ProgressBar → footer: small GradeBadge with label left, one stat right (stat turns `text-grade-d` when it's a warning: "Behind pace", "Missed 2 days").
+- **Grid:** GoalCards, `grid-cols-3 gap-5` desktop, 1 column mobile. Card = EmojiTile + title, CategoryChip + type meta → sm ScoreRing top-right → thin ProgressBar → footer: small GradeBadge with label left, one stat right (stat turns `text-grade-d` when it's a warning: "Behind pace", "Missed 2 days").
 - Calibrating goal: dashed grey ring with "–", "…" badge labelled "Calibrating", grey progress fill.
 - **Mobile:** category pills scroll horizontally in one line (no wrap), the segmented control sits below them.
 - **Empty:** filters stay visible (no counts), then a centred card: target icon tile → "No goals yet" → one sentence → "Create a goal". No FAB.
@@ -212,6 +232,7 @@ Breakpoint: **mobile < 768px**, desktop ≥ 768px (Tailwind `md:`). Build mobile
 - Contents, top to bottom:
   1. "LOG CHECK-IN" label + "How did it go?" heading, close button (36px circle) top-right.
   2. Goal picker row (`bg-surface-2 rounded-md`): 40px ring + goal name + "Current best: 72 kg" + chevron. Preselected when opened from a goal page.
+     - **Why this matters** (only if the goal has one): attached directly under the picker (shared `surface-2` block, 1px `border-t border-border`, bottom corners rounded): gold `quote` icon, `label` "WHY THIS MATTERS" in `text-gold`, then the text in `text-body-sm text-ink`. Read-only here; edited on the goal. Changes when the picked goal changes.
   3. **Value** (numeric goals only): large input with 28px Unbounded digits (24px on mobile) and the unit on the right. Hidden for habit goals (the check-in itself counts); for milestone goals it becomes a "Mark a subtask done" list.
   4. **Effort 1-5:** five equal tiles (number + Easy / Light / Solid / Hard / All out); selected = `bg-grade-s-dim border-gold text-gold`. Required.
   5. **Date:** pills Today (default, selected = `bg-ink text-bg`) / Yesterday / Pick date (opens a date picker; no future dates).
@@ -319,3 +340,83 @@ Entries oldest → newest (reads like a story). Lines for mood or tags are left 
 ### Data needed (proposal for the Tech Lead, not in the current schema or API contract)
 
 `journal_entries`: `id`, `user_id`, `title` (nullable, ≤120), `body` (text), `mood` (smallint 1-5, nullable), `entry_at` (timestamptz, user-editable), `created_at`, `updated_at`, `deleted_at`. Tags: `journal_tags (entry_id, tag)` with tag lowercase ≤32 chars, or a `text[]` column. Journal does **not** affect any score.
+
+---
+
+## Create and edit goals
+
+Screens `10`-`12` in `design/screens/`, mobile at **375px**. "New goal" (Goals header, dashboard empty state) opens **10 → 11**. "Edit goal" on Goal detail opens **11** in edit mode (example: `11b`).
+
+Both steps are **focused pages** like the journal editor: no sidebar, no tab bar, no FAB. Routes `/goals/new` (step 1), `/goals/new/details?template=run-5k` (step 2), `/goals/:id/edit`.
+
+**Top bar** (sticky, `bg-bg/90 backdrop-blur border-b border-border`, 3 columns): left = back/cancel link; centre = step dots (24×4px bars, done = `bg-gold`) + "Step 1 of 2 · Pick a start" (text hidden on mobile); right = primary action (desktop only; on mobile it moves to a fixed footer bar, full-width button, `bg-surface-1/95 backdrop-blur border-t`).
+
+### 10. Pick a start (`10-goal-templates`)
+
+- Container `max-w-[960px]`. Title "New goal" (`text-display`) + one line: "Start from a template and tweak it, or start blank. You can change everything later."
+- **Start blank** card first: full width, `border-[1.5px] border-dashed border-border-strong rounded-lg p-5`, 48px gold square with `plus`, "Start blank" + "Name it, pick a type, done in 30 seconds.", chevron.
+- `label` "TEMPLATES", then a CategoryChip filter row (All + categories).
+- Sections per category (`label` heading with the category emoji), each a `grid-cols-3 gap-3` of **template cards**: `bh-card--interactive p-4`, EmojiTile md + name (`15px semibold`) + summary (`text-body-sm text-ink-muted`: "Habit · 4 times a week", "Numeric · 32 → 28 min", "Milestone · subtasks + due date").
+- Templates in v1 (static JSON in the frontend, 12): Fitness: Gym 4x a week, Run 5 km under 28 min, Bench press target. Study: Finish an assignment, Read 20 pages a day, Pass an exam. Career: Apply to 3 jobs a week, Ship a portfolio site, Learn React. Custom: Meditate 10 min, In bed by 11 pm, Save Rs 50,000. A template fills: name, emoji, category, type and type fields; milestone templates also add starter subtasks.
+- **Mobile:** single-column list rows (`p-3 px-4`, tile + name + summary + chevron). The filter row scrolls sideways.
+
+### 11. Goal details: create (`11-goal-new-numeric`)
+
+**Desktop:** `max-w-[1080px]`, `grid-cols-[1fr_320px] gap-8`: form card left, sticky **Preview** right. **Mobile:** form only, no preview, fixed "Create goal" footer.
+
+Form card (`bh-card`, fields `gap-6`). **Basic fields, always visible:**
+1. **Identity row:** lg EmojiTile button (opens the emoji + colour picker) + "Goal name" input (`text-[20px] font-semibold`, required, ≤60 chars).
+2. **Category:** CategoryChip picker (one selected) + "+ New category" chip (opens the category dialog from 12b; the new category is selected on save). Mobile: scrolls sideways.
+3. **Type:** SegmentedControl Numeric / Habit / Milestone + a one-line explanation of the selected type.
+4. **Type block** (`bg-surface-2 rounded-lg p-4 gap-4`), depends on type:
+   - **Numeric:** `grid-cols-3`: Start value, Target value (both with the unit as a suffix, Unbounded 20px digits, `inputmode="decimal"`) and Unit (free text: kg, min, km, pages, Rs). Mobile: start + target side by side, Unit full width below. **Direction** SegmentedControl ↗ Increase / ↘ Decrease, **set automatically** from start vs target (target < start → Decrease), with a sparkles hint saying so; the user can override. Under it a summary line: "**32 min** → **28 min** · 4 min to go". Validation: start ≠ target.
+   - **Habit:** see 11b.
+   - **Milestone:** a subtask list (add with Enter, drag to reorder, min 1).
+5. **Target date** (optional): date button + "9 weeks" countdown right; help text "With a date, Bihan can tell if you're ahead or behind pace." Required for milestones (they have a due date).
+
+**More options** (Disclosure, collapsed on create): **Why this matters** and **Start date** (default today, can't be after the target date).
+
+**Preview card** (desktop): the real GoalCard updated live as you type: Calibrating ring, emoji tile, chip and meta, plus a tip: "Your grade shows up after 3 days of check-ins."
+
+**Primary:** "Create goal" (disabled until name + required type fields are valid). On success: go to the new Goal detail and show a toast.
+
+### 11b. Goal details: edit (`11b-goal-edit-habit`, More options open)
+
+- Title "Edit goal", subtitle "Started Oct 1 · 23 check-ins". Top bar: "‹ Goal", Cancel (ghost, desktop), "Save changes".
+- **Type is locked** once a goal has check-ins: SegmentedControl disabled + a note with a `lock` icon: "Type can't change once a goal has check-ins."
+- **Habit block:** "How often?" SegmentedControl **Every day / Per week / Pick days**:
+  - Every day → nothing else.
+  - Per week → Stepper (1-7) + "times a week".
+  - Pick days → WeekdayPicker + summary line.
+- **Why this matters:** textarea (3 rows), placeholder "e.g. Play futsal again without getting gassed", max **140 characters** with a counter, help "Shown on the check-in screen, as a reminder." (quote icon).
+- **Archive or delete** block at the bottom (edit only), `border-t`: "Archive" (secondary, keeps history, moves the goal to Goals › Archived) and "Delete" (danger, confirm dialog naming the goal; removes check-ins too).
+- Preview shows the current score and labels "Unsaved changes"; tip: "Changing the schedule only affects days from today on. Past check-ins and scores stay as they are."
+- Leaving with unsaved changes asks to discard.
+
+### 11c. Emoji and colour picker open (`11c-goal-emoji-picker`)
+
+- Desktop: popover under the tile (see EmojiPicker). Colour row first, because it's the quicker choice, then search, then emoji sections with "Suggested for running" at the top.
+- Mobile: bottom sheet over a scrim, same order.
+- The tile, the preview card and the category default all update live. If the user never picks a colour, the goal uses its category's colour.
+
+### 12. Settings › Categories (`12-settings-categories`)
+
+- Settings page in the app shell (Settings active). Tabs (underline style, active `border-b-2 border-gold text-ink`): Profile, **Categories**, Scoring, Notifications, Data. Scrolls sideways on mobile.
+- Content `max-w-[820px]`: one card with header "Categories" + "Group your goals. Each category gets its own score on the dashboard. Drag to reorder." + primary small "New category".
+- Rows (`grid-cols-[20px_40px_1fr_auto]`, `border-t`): drag handle (`grip-vertical`, desktop only; on mobile long-press to drag), md EmojiTile, name + "Default" `bh-chip` for the 4 seeded ones, "2 goals" / "No goals yet", then Edit (pencil) and ⋯ icon buttons (40px).
+- ⋯ menu: Edit, Delete. **Default categories** can be renamed and recoloured but not deleted. **Deleting** a category with goals opens a confirm that asks where to move them (a category picker); empty categories delete straight away with an Undo toast.
+- Order here = order on the dashboard's category card, filters and pickers. The dashboard category card shows the first 4 with goals plus "All categories".
+- Max 12 categories.
+
+### 12b. New / edit category dialog (`12b-category-dialog`)
+
+- Desktop: modal 480px (same frame as check-in). Mobile: bottom sheet. Opened from Settings or from "+ New category" in the goal form.
+- Fields: lg EmojiTile (live) + **Name** (required, ≤24 chars, unique per user) → **Colour** (ColourSwatches) → **Emoji** (search + grid, 2 rows visible, scrolls) → **Preview** (the CategoryChip as it will appear).
+- Footer: Cancel (ghost, desktop) + "Create category" / "Save changes".
+
+### Data needed (proposal for the Tech Lead, changes schema and API)
+
+- `categories`: `id`, `user_id`, `name` (≤24), `emoji` (text, one grapheme), `color` (enum of the 10 identity names), `sort_order`, `is_default`, `created_at`. Seed the 4 defaults per user on register. **Replaces the fixed category enum** on goals with `category_id` (FK).
+- `goals` new/changed columns: `emoji`, `color` (nullable → falls back to category colour), `start_value`, `target_value`, `unit`, `direction` (`increase` | `decrease`), `frequency_type` (`daily` | `per_week` | `weekdays`), `times_per_week` (1-7), `weekdays` (bitmask or smallint[] 1=Mon … 7=Sun), `why` (≤140, nullable), `start_date`, `archived_at`.
+- **Scoring impact:** numeric progress must use `(current - start) / (target - start)` so decreasing goals work; habit "expected check-ins" must come from the frequency (daily = 7/wk, per_week = N, weekdays = the selected days only, so missing a non-scheduled day costs nothing). The scoring-engine agent needs to update its functions and tests.
+- Endpoints: `GET/POST/PATCH/DELETE /categories`, `PATCH /categories/order`, and the new goal fields on `POST/PATCH /goals`. Templates stay frontend-only in v1.

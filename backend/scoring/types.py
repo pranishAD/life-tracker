@@ -25,6 +25,23 @@ class GoalStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class FrequencyType(str, Enum):
+    """Habit check-in schedule (api-contract FrequencyType).
+
+    - DAILY: every day, i.e. 7 per week (frequency_per_week is ignored).
+    - PER_WEEK: frequency_per_week times a week, any days (legacy behaviour).
+    - WEEKDAYS: only the ISO weekdays listed in `Goal.weekdays`; unscheduled
+      days are never expected (frequency_per_week is ignored).
+
+    `Goal.frequency_type = None` means "legacy" and behaves exactly like PER_WEEK.
+    See README "Interpretations" 2 and 9.
+    """
+
+    DAILY = "daily"
+    PER_WEEK = "per_week"
+    WEEKDAYS = "weekdays"
+
+
 @dataclass(frozen=True)
 class Goal:
     """Everything the scoring engine needs to know about a goal.
@@ -33,6 +50,15 @@ class Goal:
     datetime to a date before calling in). `target_value`/`current_value` are used
     by numeric goals, `frequency_per_week` by habit goals (and optionally as a
     fallback expectation for numeric/milestone goals, see README "Interpretations").
+
+    Goal-customisation fields (all optional; their defaults reproduce the
+    pre-customisation behaviour exactly):
+    - `start_value`: numeric goals' starting point. None is treated as 0.
+      Progress = (current - start) / (target - start), so a target below the
+      start (a "decrease" goal) works by sign; no direction field is needed.
+    - `frequency_type`: see `FrequencyType`. None = legacy (PER_WEEK).
+    - `weekdays`: ISO weekdays (1=Mon..7=Sun), only used when
+      frequency_type is WEEKDAYS.
     """
 
     type: GoalType
@@ -44,6 +70,9 @@ class Goal:
     frequency_per_week: Optional[float] = None
     deadline: Optional[date] = None
     weight: float = 1.0
+    start_value: Optional[float] = None
+    frequency_type: Optional[FrequencyType] = None
+    weekdays: Optional[tuple[int, ...]] = None
 
 
 @dataclass(frozen=True)
@@ -111,6 +140,7 @@ class CategoryScoreInput:
 __all__ = [
     "GoalType",
     "GoalStatus",
+    "FrequencyType",
     "Goal",
     "CheckIn",
     "Milestone",

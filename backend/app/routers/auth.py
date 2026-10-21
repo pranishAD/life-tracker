@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.auth.security import create_access_token, hash_password, verify_password
+from app.auth.security import create_access_token, hash_password, verify_password_or_dummy
 from app.deps import get_current_user
 from app.errors import conflict, unauthorized
 from app.models import User
@@ -19,6 +19,7 @@ from app.schemas.auth import (
     UpdateProfileRequest,
     UserOut,
 )
+from app.services.categories import seed_default_categories
 from db.session import get_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -41,6 +42,9 @@ def register(payload: RegisterRequest, db: Session = Depends(get_session)) -> Au
         password_hash=hash_password(payload.password),
     )
     db.add(user)
+    db.flush()  # assigns user.id
+    # The 4 default categories, committed in the same transaction as the user.
+    seed_default_categories(db, user.id)
     db.commit()
     db.refresh(user)
 
@@ -51,7 +55,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_session)) -> Au
 @router.post("/login", response_model=AuthResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_session)) -> AuthResponse:
     user = _get_user_by_email(db, payload.email)
-    if user is None or not verify_password(payload.password, user.password_hash):
+    # Always runs bcrypt exactly once, even for an unknown email (SEC-005).
+    password_ok = verify_password_or_dummy(
+        payload.password, user.password_hash if user is not None else None
+    )
+    if user is None or not password_ok:
         raise unauthorized("Incorrect email or password.")
 
     token = create_access_token(str(user.id))

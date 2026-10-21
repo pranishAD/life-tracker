@@ -68,6 +68,15 @@ _CODE_BY_STATUS = {
 }
 
 
+# SEC-016: added to every API response (see `create_app` in app/main.py).
+# Applied with setdefault there, so a route or Vercel can still override.
+SECURITY_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
+
+
 def _error_body(code: str, message: str) -> dict:
     return {"error": {"code": code, "message": message}}
 
@@ -106,4 +115,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=500,
             content=_error_body("INTERNAL_ERROR", "An unexpected error occurred."),
+            # This handler runs in Starlette's outermost ServerErrorMiddleware,
+            # i.e. outside the security-headers middleware, so set them here.
+            headers=SECURITY_HEADERS,
         )

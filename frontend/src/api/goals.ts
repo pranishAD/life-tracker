@@ -1,6 +1,5 @@
 import { apiFetch } from "./client";
 import type {
-  Category,
   Goal,
   GoalCreateRequest,
   GoalStatus,
@@ -10,8 +9,13 @@ import type {
   MilestoneUpdateRequest,
 } from "./types";
 
-export function listGoals(filters?: { category?: Category; status?: GoalStatus }): Promise<Goal[]> {
-  return apiFetch<Goal[]>("/goals", { query: filters });
+export interface GoalFilters {
+  category_id?: string;
+  status?: GoalStatus;
+}
+
+export function listGoals(filters?: GoalFilters): Promise<Goal[]> {
+  return apiFetch<Goal[]>("/goals", { query: { category_id: filters?.category_id, status: filters?.status } });
 }
 
 export function getGoal(goalId: string): Promise<Goal> {

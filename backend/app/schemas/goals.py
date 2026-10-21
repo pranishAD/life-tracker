@@ -1,15 +1,35 @@
-"""Pydantic v2 schemas for the `goals` tag of docs/api-contract.yaml."""
+"""Pydantic v2 schemas for the `goals` tag of docs/api-contract.yaml (1.1.0).
+
+Field-level bounds live here; the cross-field type rules (GoalCreateRequest's
+description: numeric start/target/direction, habit schedules, which fields a
+type may send, start_date <= deadline) live in app/services/goal_rules.py,
+because PATCH must apply them to the *merged* goal, not just the request.
+"""
 
 from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models import Category, GoalStatus, GoalType
-from app.schemas.milestones import MilestoneOut
+from app.models import FrequencyType, GoalStatus, GoalType, IdentityColor, NumericDirection
+from app.schemas.categories import CategoryRef
+from app.schemas.common import (
+    DESCRIPTION_MAX_LENGTH,
+    MAX_STARTER_MILESTONES,
+    TITLE_MAX_LENGTH,
+    UNIT_MAX_LENGTH,
+    BoundedDate,
+    Emoji,
+    FrequencyPerWeek,
+    NonNegativeLargeNumber,
+    Weekday,
+    Weight,
+    WhyText,
+)
+from app.schemas.milestones import MilestoneCreateRequest, MilestoneOut
 
 
 class GoalOut(BaseModel):
@@ -19,12 +39,22 @@ class GoalOut(BaseModel):
     user_id: uuid.UUID
     title: str
     description: Optional[str] = None
-    category: Category
+    category_id: uuid.UUID
+    category: CategoryRef
+    emoji: Optional[str] = None
+    color: Optional[IdentityColor] = None
     type: GoalType
+    start_value: Optional[float] = None
     target_value: Optional[float] = None
     current_value: Optional[float] = None
     unit: Optional[str] = None
+    direction: Optional[NumericDirection] = None
+    frequency_type: Optional[FrequencyType] = None
     frequency_per_week: Optional[int] = None
+    weekdays: Optional[list[int]] = None
+    why: Optional[str] = None
+    check_in_count: int
+    archived_at: Optional[datetime] = None
     start_date: date
     deadline: Optional[date] = None
     weight: float
@@ -33,50 +63,72 @@ class GoalOut(BaseModel):
     created_at: datetime
 
 
-class GoalCreateRequest(BaseModel):
-    title: str = Field(min_length=1)
-    description: Optional[str] = None
-    category: Category
-    type: GoalType
-    target_value: Optional[float] = None
-    unit: Optional[str] = None
-    frequency_per_week: Optional[int] = None
-    start_date: date
-    deadline: Optional[date] = None
-    weight: float = 1.0
+def build_goal_out(goal: Any, check_in_count: int) -> GoalOut:
+    """GoalOut from an ORM Goal + its check-in count (not a column)."""
+    data = {name: getattr(goal, name) for name in GoalOut.model_fields if name != "check_in_count"}
+    data["category"] = CategoryRef.model_validate(goal.category)
+    data["milestones"] = [MilestoneOut.model_validate(m) for m in goal.milestones]
+    data["check_in_count"] = check_in_count
+    return GoalOut.model_validate(data)
 
-    @model_validator(mode="after")
-    def _validate_type_requirements(self) -> "GoalCreateRequest":
-        if self.weight <= 0:
-            raise ValueError("weight must be greater than 0")
-        if self.target_value is not None and self.target_value <= 0:
-            raise ValueError("target_value must be greater than 0")
-        if self.frequency_per_week is not None and self.frequency_per_week <= 0:
-            raise ValueError("frequency_per_week must be greater than 0")
-        if self.type == GoalType.NUMERIC and self.target_value is None:
-            raise ValueError("target_value is required for numeric goals")
-        if self.type == GoalType.HABIT and self.frequency_per_week is None:
-            raise ValueError("frequency_per_week is required for habit goals")
-        return self
+
+def _reject_duplicate_weekdays(value: Optional[list[int]]) -> Optional[list[int]]:
+    # Contract: uniqueItems -> duplicates are a 422, not silently deduped.
+    if value is not None and len(set(value)) != len(value):
+        raise ValueError("weekdays must not contain duplicates")
+    return value
+
+
+class GoalCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=TITLE_MAX_LENGTH)
+    description: Optional[str] = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
+    category_id: uuid.UUID
+    emoji: Optional[Emoji] = None
+    color: Optional[IdentityColor] = None
+    type: GoalType
+    start_value: Optional[NonNegativeLargeNumber] = None
+    target_value: Optional[NonNegativeLargeNumber] = None
+    unit: Optional[str] = Field(default=None, max_length=UNIT_MAX_LENGTH)
+    direction: Optional[NumericDirection] = None
+    frequency_type: Optional[FrequencyType] = None
+    frequency_per_week: Optional[FrequencyPerWeek] = None
+    weekdays: Optional[list[Weekday]] = Field(default=None, min_length=1, max_length=7)
+    why: Optional[WhyText] = None
+    milestones: list[MilestoneCreateRequest] = Field(
+        default_factory=list, max_length=MAX_STARTER_MILESTONES
+    )
+    start_date: BoundedDate
+    deadline: Optional[BoundedDate] = None
+    weight: Weight = 1.0
+
+    _weekdays_unique = field_validator("weekdays")(_reject_duplicate_weekdays)
 
 
 class GoalUpdateRequest(BaseModel):
-    title: Optional[str] = Field(default=None, min_length=1)
-    description: Optional[str] = None
-    category: Optional[Category] = None
-    target_value: Optional[float] = None
-    unit: Optional[str] = None
-    frequency_per_week: Optional[int] = None
-    deadline: Optional[date] = None
-    weight: Optional[float] = None
+    """Every field optional; absent = unchanged. Explicit null is only
+    accepted for the contract's nullable fields (routers/goals.py rejects it
+    for title/category_id/type/start_date/weight/status)."""
+
+    title: Optional[str] = Field(default=None, min_length=1, max_length=TITLE_MAX_LENGTH)
+    description: Optional[str] = Field(default=None, max_length=DESCRIPTION_MAX_LENGTH)
+    category_id: Optional[uuid.UUID] = None
+    emoji: Optional[Emoji] = None
+    color: Optional[IdentityColor] = None
+    type: Optional[GoalType] = None
+    start_value: Optional[NonNegativeLargeNumber] = None
+    target_value: Optional[NonNegativeLargeNumber] = None
+    unit: Optional[str] = Field(default=None, max_length=UNIT_MAX_LENGTH)
+    direction: Optional[NumericDirection] = None
+    frequency_type: Optional[FrequencyType] = None
+    frequency_per_week: Optional[FrequencyPerWeek] = None
+    weekdays: Optional[list[Weekday]] = Field(default=None, min_length=1, max_length=7)
+    why: Optional[WhyText] = None
+    start_date: Optional[BoundedDate] = None
+    deadline: Optional[BoundedDate] = None
+    weight: Optional[Weight] = None
     status: Optional[GoalStatus] = None
 
-    @model_validator(mode="after")
-    def _validate_values(self) -> "GoalUpdateRequest":
-        if self.weight is not None and self.weight <= 0:
-            raise ValueError("weight must be greater than 0")
-        if self.target_value is not None and self.target_value <= 0:
-            raise ValueError("target_value must be greater than 0")
-        if self.frequency_per_week is not None and self.frequency_per_week <= 0:
-            raise ValueError("frequency_per_week must be greater than 0")
-        return self
+    _weekdays_unique = field_validator("weekdays")(_reject_duplicate_weekdays)
+
+
+NON_NULLABLE_UPDATE_FIELDS = ("title", "category_id", "type", "start_date", "weight", "status")

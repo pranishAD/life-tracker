@@ -16,6 +16,7 @@ from .formulas import (
     is_calibrating,
     momentum,
     pace,
+    scheduled_weekdays,
 )
 from .types import (
     CategoryScoreInput,
@@ -23,6 +24,7 @@ from .types import (
     Goal,
     GoalScore,
     GoalStatus,
+    GoalType,
     Milestone,
     ScoreBreakdown,
     WeightedScore,
@@ -76,6 +78,10 @@ def score_goal(
     Completed goals get a frozen breakdown (see `_frozen_breakdown`). Goals
     under 3 days old (and not completed) report grade "Calibrating" instead
     of a letter grade, per docs/master-plan.md section 4.
+
+    Archived goals are scored exactly like active ones if passed in (the
+    function doesn't filter); excluding them from category/overall scores is
+    the caller's job via `is_scorable_status`. README "Interpretations" 6.
     """
     if goal.status == GoalStatus.COMPLETED:
         breakdown = _frozen_breakdown(check_ins)
@@ -89,6 +95,9 @@ def score_goal(
 
     total = _total_from_breakdown(breakdown)
 
+    # Specific-weekdays habits count streaks over scheduled days only.
+    streak_days = scheduled_weekdays(goal) if goal.type == GoalType.HABIT else None
+
     if goal.status != GoalStatus.COMPLETED and is_calibrating(goal.created_at, today):
         grade_letter, grade_label = "Calibrating", "Calibrating"
     else:
@@ -100,8 +109,8 @@ def score_goal(
         total=total,
         grade=grade_letter,
         grade_label=grade_label,
-        current_streak=current_streak(check_ins, today),
-        best_streak=best_streak(check_ins),
+        current_streak=current_streak(check_ins, today, weekdays=streak_days),
+        best_streak=best_streak(check_ins, weekdays=streak_days),
     )
 
 

@@ -2,10 +2,28 @@
 // that file's `components.schemas` section — it is the contract, we don't
 // invent fields here.
 
-export type Category = "fitness" | "study" | "career" | "custom";
 export type GoalType = "numeric" | "habit" | "milestone";
 export type GoalStatus = "active" | "completed" | "archived";
 export type Grade = "S" | "A" | "B" | "C" | "D" | "Calibrating";
+
+/** The 10 user-pickable identity colours (contract `IdentityColor`). They only
+ * tint emoji tiles, category chips, dots and swatches — never grades. */
+export type IdentityColor =
+  | "slate"
+  | "violet"
+  | "purple"
+  | "pink"
+  | "rose"
+  | "sand"
+  | "lime"
+  | "teal"
+  | "cyan"
+  | "indigo";
+
+export type NumericDirection = "increase" | "decrease";
+export type FrequencyType = "daily" | "per_week" | "weekdays";
+/** ISO weekday, 1 = Monday … 7 = Sunday. */
+export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 
 export interface ApiErrorBody {
   error: { code: string; message: string };
@@ -24,6 +42,39 @@ export interface AuthResponse {
   user: User;
 }
 
+/** The category fields embedded in a Goal and in dashboard category scores. */
+export interface CategoryRef {
+  id: string;
+  name: string;
+  emoji: string;
+  color: IdentityColor;
+}
+
+/** A user's category (contract `Category`): 4 seeded defaults + custom ones, max 12. */
+export interface Category extends CategoryRef {
+  sort_order: number;
+  is_default: boolean;
+  /** Goals in this category, any status (archived included). */
+  goal_count: number;
+  created_at: string;
+}
+
+export interface CategoryCreateRequest {
+  name: string;
+  emoji: string;
+  color: IdentityColor;
+}
+
+export interface CategoryUpdateRequest {
+  name?: string;
+  emoji?: string;
+  color?: IdentityColor;
+}
+
+export interface CategoryOrderRequest {
+  category_ids: string[];
+}
+
 export interface Milestone {
   id: string;
   goal_id: string;
@@ -38,12 +89,25 @@ export interface Goal {
   user_id: string;
   title: string;
   description: string | null;
-  category: Category;
+  category_id: string;
+  category: CategoryRef;
+  /** null → show the category's emoji */
+  emoji: string | null;
+  /** null → use the category's colour */
+  color: IdentityColor | null;
   type: GoalType;
+  start_value: number | null;
   target_value: number | null;
   current_value: number | null;
   unit: string | null;
+  direction: NumericDirection | null;
+  frequency_type: FrequencyType | null;
   frequency_per_week: number | null;
+  weekdays: Weekday[] | null;
+  why: string | null;
+  /** When > 0 the type is locked on the edit screen. */
+  check_in_count: number;
+  archived_at: string | null;
   start_date: string;
   deadline: string | null;
   weight: number;
@@ -55,23 +119,42 @@ export interface Goal {
 export interface GoalCreateRequest {
   title: string;
   description?: string | null;
-  category: Category;
+  category_id: string;
+  emoji?: string | null;
+  color?: IdentityColor | null;
   type: GoalType;
+  start_value?: number | null;
   target_value?: number | null;
   unit?: string | null;
+  direction?: NumericDirection | null;
+  frequency_type?: FrequencyType | null;
   frequency_per_week?: number | null;
+  weekdays?: Weekday[] | null;
+  why?: string | null;
+  /** Milestone goals only: starter subtasks, created in this order. */
+  milestones?: MilestoneCreateRequest[];
   start_date: string;
   deadline?: string | null;
   weight?: number;
 }
 
+/** Partial update. Send null to clear a nullable field. */
 export interface GoalUpdateRequest {
   title?: string;
   description?: string | null;
-  category?: Category;
+  category_id?: string;
+  emoji?: string | null;
+  color?: IdentityColor | null;
+  type?: GoalType;
+  start_value?: number | null;
   target_value?: number | null;
   unit?: string | null;
+  direction?: NumericDirection | null;
+  frequency_type?: FrequencyType | null;
   frequency_per_week?: number | null;
+  weekdays?: Weekday[] | null;
+  why?: string | null;
+  start_date?: string;
   deadline?: string | null;
   weight?: number;
   status?: GoalStatus;
@@ -114,8 +197,9 @@ export interface ScoreSnapshot {
   total: number | null;
 }
 
+/** One per user category, in sort_order (even ones with no goals). */
 export interface CategoryScore {
-  category: Category;
+  category: CategoryRef;
   score: number | null;
   has_active_goals: boolean;
 }
@@ -154,7 +238,7 @@ export interface WeeklyReview {
 }
 
 export interface CategoryWeight {
-  category: Category;
+  category_id: string;
   weight: number;
 }
 

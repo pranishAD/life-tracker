@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.deps import get_current_user
 from app.models import User
+from app.schemas.common import ensure_dates_in_range
 from app.schemas.reviews import WeeklyReviewOut
 from app.services.dashboard_service import build_weekly_review
 from db.session import get_session
@@ -22,6 +23,7 @@ def get_weekly_review(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_session),
 ) -> WeeklyReviewOut:
+    ensure_dates_in_range(week_start)
     data = build_weekly_review(db, current_user, week_start, date.today())
     return WeeklyReviewOut(
         week_start=data.week_start,

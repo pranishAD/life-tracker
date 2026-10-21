@@ -10,6 +10,8 @@ interface ProgressBarProps {
   thin?: boolean;
   metaLeft?: string;
   metaRight?: string;
+  /** Accessible name for screen readers. */
+  label?: string;
   className?: string;
 }
 
@@ -21,6 +23,7 @@ export default function ProgressBar({
   thin,
   metaLeft,
   metaRight,
+  label = "Progress",
   className,
 }: ProgressBarProps) {
   const clamped = Math.max(0, Math.min(100, percent));
@@ -32,7 +35,14 @@ export default function ProgressBar({
           <span className="text-ink font-semibold">{metaRight}</span>
         </div>
       )}
-      <div className={clsx("relative rounded-full bg-surface-2", thin ? "h-1.5" : "h-2.5")}>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={Math.round(clamped)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        className={clsx("relative rounded-full bg-surface-2", thin ? "h-1.5" : "h-2.5")}
+      >
         <div
           className="h-full rounded-full"
           style={{ width: `${clamped}%`, backgroundColor: "var(--g)" }}

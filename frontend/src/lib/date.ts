@@ -76,3 +76,13 @@ export function daysBetween(fromIso: string, toIsoStr: string): number {
 export function isPast(iso: string): boolean {
   return daysBetween(todayIso(), iso) < 0;
 }
+
+/** Countdown to a date for the target-date field: "Today", "5 days", "9 weeks", "Past". */
+export function countdownLabel(iso: string, from: string = todayIso()): string {
+  const days = daysBetween(from, iso);
+  if (days < 0) return "Past";
+  if (days === 0) return "Today";
+  if (days < 14) return `${days} day${days === 1 ? "" : "s"}`;
+  return `${Math.round(days / 7)} weeks`;
+}
+
