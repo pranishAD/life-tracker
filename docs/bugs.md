@@ -30,7 +30,7 @@ Severity: critical (blocks core loop, data loss, security, wrong score) / major 
 - Evidence: `docker compose exec backend alembic current` shows 0002 while `alembic heads` shows `0003_goal_customisation (head)`.
 - Workaround: `docker compose exec backend alembic upgrade head` (local DB only).
 - Suggested fix: run `alembic upgrade head` in the backend start command for dev, or fail fast if not at head.
-- Status: Open
+- Status: Fixed 2026-10-21 (docker-compose backend command now runs `alembic upgrade head` before uvicorn; DATABASE_URL pinned to the compose db). Verified: alembic current = 0003 (head).
 
 ## BUG-003 - Progress bars expose no accessible role or value
 
@@ -41,4 +41,4 @@ Severity: critical (blocks core loop, data loss, security, wrong score) / major 
 - Expected: `role="progressbar"` with `aria-valuenow` (0-100), `aria-valuemin`, `aria-valuemax` and a label, so screen readers and tests can read the progress.
 - Actual: plain `div`s with an inline `width: N%`; no role or value. E2E (TC-GC-04) has to assert on the inline style `width: 50%`, which is fragile.
 - Evidence: `frontend/src/components/ProgressBar.tsx`.
-- Status: Open
+- Status: Fixed 2026-10-21 (ProgressBar has role=progressbar + aria-valuenow/min/max + aria-label; 3 vitest cases). Pending: qa-tester to switch TC-GC-04 off the inline-style assertion; call sites could pass the goal name as label.

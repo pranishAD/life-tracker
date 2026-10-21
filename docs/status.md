@@ -25,7 +25,8 @@ Phase 0, 2, 4, and 6 (deploy config) approved by Aayush. App name is Bihan. Depl
 ## Goal customisation (branch feature/goal-customisation, NOT merged, waiting for Aayush)
 Per-user categories (4 defaults, max 12, reorder, delete-with-move), goal emoji/colour/start value/direction/habit schedule/why/archive, screens 10-12b. Branched from security/review-1, so **merge security/review-1 first**.
 - Migration 0003_goal_customisation: tested on a copy of seeded dev data (up, down, up again; no data loss, existing scores unchanged). NOT yet run on Neon or the local dev DB.
-- Tests: backend 480 passed (incl. 171 scoring + legacy-score regression), frontend 182 passed, build clean. Not yet checked in a browser against the real backend.
+- 2026-10-21: Aayush approved the recommendations (docs/decisions.md). BUG-002 and BUG-003 fixed, BUG-001 stays a documented workaround. Still waiting: Aayush runs migration 0003 on Neon, browser click-through, then merge (security/review-1 first). Nothing merged yet.
+- Tests: backend 480 passed (incl. 171 scoring + legacy-score regression), frontend 185 passed, build clean. Not yet checked in a browser against the real backend.
 - E2E: Playwright 10/10 (desktop + 375px), see docs/test-plan.md; 3 open bugs in docs/bugs.md (BUG-001..003, none blocking).
 - Open: scoring Interpretations #8-#10, extra CHECK constraints, frequency_per_week kept instead of times_per_week, Settings Notifications/Data tabs omitted, lint config missing (pre-existing).
 

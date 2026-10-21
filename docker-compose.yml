@@ -25,7 +25,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg2://lifetracker:lifetracker@db:5432/life_tracker}
+      DATABASE_URL: postgresql+psycopg2://lifetracker:lifetracker@db:5432/life_tracker   # fixed to compose db on purpose (auto-migrates on start)
       JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
       JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-60}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
@@ -36,7 +36,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Dev only: migrate the compose db to head, then start the server.
+    # Fails loudly (container exits) if the migration fails.
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build:

@@ -45,3 +45,6 @@ build/
 # the source of truth (tokens.json, components.md, screens/, screens-html/);
 # the zip is just the designer chat's raw download, not meant to be tracked.
 design/bihan-design.zip
+
+# Designer chat raw download for the goal flow; curated files in design/ are the source of truth.
+design/bihan-goal-flow.zip

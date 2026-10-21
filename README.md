@@ -108,6 +108,10 @@ it.
 
 Once `db-architect` has added Alembic config under `backend/db/`:
 
+Note: the local backend container runs `alembic upgrade head` automatically every
+time it starts (dev only, always against the compose `db`). If a migration fails the
+container exits, so check `docker compose logs backend`. Manual commands:
+
 ```bash
 # Apply all migrations
 docker compose exec backend alembic upgrade head
